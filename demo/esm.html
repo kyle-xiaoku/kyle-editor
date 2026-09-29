@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KEditor · ESM 引入 Demo</title>
+    <link rel="stylesheet" href="assets/demo.css" />
+  </head>
+  <body>
+    <div class="header">
+      <h1>ESM 引入</h1>
+      <span class="tag">import { KEditor } from 'kyle-editor'</span>
+      <div class="nav">
+        <a class="btn" href="../index.html">首页</a>
+        <a class="btn" href="script.html">Script</a>
+        <a class="btn" href="vue.html">Vue</a>
+      </div>
+    </div>
+
+    <main>
+      <div class="grid">
+        <section class="card">
+          <h2>自定义适配器（分片日志 + 手动进度）</h2>
+          <div class="body tight"><div id="editor"></div></div>
+        </section>
+        <aside style="display: flex; flex-direction: column; gap: 18px">
+          <section class="card">
+            <h2>输出</h2>
+            <div class="body"><pre class="out" id="out">（编辑内容会实时输出）</pre></div>
+          </section>
+          <section class="card">
+            <h2>adapter 调用记录</h2>
+            <div class="body tight"><div class="log" id="log"></div></div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <script type="module">
+      import { create, ChunkUploader } from '../dist/keditor.es.js'
+
+      const log = document.getElementById('log')
+      const out = document.getElementById('out')
+      const add = (tag, text) => {
+        const row = document.createElement('div')
+        row.className = 'row'
+        row.innerHTML = `<b>${tag}</b><span>${text}</span>`
+        log.prepend(row)
+        while (log.childElementCount > 30) log.lastElementChild.remove()
+      }
+
+      // 完全自定义 adapter：只实现 init / put / complete
+      const chunks = new Map()
+      const customAdapter = {
+        async init(meta) {
+          add('init', `${meta.name} · ${(meta.size / 1024 / 1024).toFixed(2)}MB → ${meta.totalChunks} 片`)
+          const resumed = chunks.get(meta.fingerprint)
+          if (resumed?.url) return { url: resumed.url } // 秒传
+          return { uploadId: meta.fingerprint, uploadedChunks: resumed?.parts ? [...resumed.parts] : [] }
+        },
+        async put({ index, total, blob, uploadId }) {
+          await new Promise((r) => setTimeout(r, 60))
+          const store = chunks.get(uploadId) || { parts: new Set() }
+          store.parts.add(index)
+          chunks.set(uploadId, store)
+          add('put', `#${index + 1}/${total} (${(blob.size / 1024).toFixed(0)}KB)`)
+          return {}
+        },
+        async complete({ meta, file }) {
+          const url = URL.createObjectURL(file)
+          chunks.set(meta.fingerprint, { url, parts: null })
+          add('complete', `合并 ${meta.totalChunks} 片 → ${url.slice(0, 40)}…`)
+          return { url }
+        },
+      }
+
+      const editor = create('#editor', {
+        value: '<p>这里演示 <strong>自定义上传适配器</strong>：每次分片调用都会打印在右侧。</p>',
+        uploader: customAdapter,
+        upload: { chunkSize: 128 * 1024, concurrency: 4 },
+        onChange: (html) => {
+          out.textContent = html
+        },
+      })
+
+      editor.on('uploaddone', ({ url }) => add('done', url.slice(0, 40) + '…'))
+      window.editor = editor
+    </script>
+  </body>
+</html>

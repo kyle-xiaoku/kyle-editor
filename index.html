@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KEditor · 微信公众号风格富文本编辑器</title>
+    <link rel="stylesheet" href="assets/demo.css" />
+    <style>
+      .hero { background: linear-gradient(180deg, #fff 0%, #f7fafa 100%); border: 1px solid var(--line); border-radius: 14px; padding: 26px 24px; margin-bottom: 20px; }
+      .hero h2 { margin: 0 0 8px; font-size: 22px; }
+      .hero p { margin: 0 0 16px; color: var(--muted); font-size: 14px; max-width: 62ch; line-height: 1.8; }
+      .hero .row-btns { margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>KEditor</h1>
+      <span class="tag">纯前端 · 分片上传 · 源码模式</span>
+      <div class="nav">
+        <a class="btn btn-primary" href="demo/script.html">Script 引入 Demo</a>
+        <a class="btn" href="demo/esm.html">ESM 引入 Demo</a>
+        <a class="btn" href="demo/vue.html">Vue 3 Demo</a>
+        <a class="btn" href="docs/integration.md">集成文档</a>
+      </div>
+    </div>
+    <main>
+      <section class="hero">
+        <h2>像写公众号一样写作</h2>
+        <p>677px 纸张版式、绿色主题、拖拽即传。图片与视频走分片上传（可取消、失败自动重试、支持断点续传与秒传），随时切换到 HTML 源码模式查看或改写产物。</p>
+        <div class="row-btns">
+          <a class="btn btn-primary" href="demo/script.html">打开编辑器 Demo</a>
+          <a class="btn" href="docs/api.md">API 文档</a>
+          <a class="btn" href="docs/upload-adapter.md">上传适配器</a>
+        </div>
+      </section>
+
+      <div class="cards">
+        <div class="tile">
+          <h3>零依赖单文件引入</h3>
+          <p><code class="inline">&lt;script src="dist/keditor.umd.js"&gt;</code> + 一行 <code class="inline">KEditor.create('#editor')</code>，样式随 JS 注入。</p>
+        </div>
+        <div class="tile">
+          <h3>Vue 3 组件</h3>
+          <p><code class="inline">app.use(KEditorVue)</code> 后即可 <code class="inline">&lt;k-editor v-model="html" /&gt;</code>，支持 disabled 与自定义 options。</p>
+        </div>
+        <div class="tile">
+          <h3>分片上传可插拔</h3>
+          <p>内置 mock 适配器开箱即用，一行换成 <code class="inline">{type:'http'}</code> 对接真实后端；图片与视频也支持直接粘贴网络链接插入。</p>
+        </div>
+        <div class="tile">
+          <h3>源码模式</h3>
+          <p>工具栏常驻「源码」按钮（<code class="inline">⌘/Ctrl+Shift+K</code>），格式化、复制、直接编辑并应用，返回可视化时自动净化（白名单标签 + 危险协议拦截）。</p>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

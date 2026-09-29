@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>KEditor 冒烟测试</title>
+    <link rel="stylesheet" href="../demo/assets/demo.css" />
+    <style>
+      #results { display: flex; flex-direction: column; gap: 6px; }
+      .case { display: flex; gap: 10px; align-items: baseline; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; }
+      .case.pass { border-color: #b7e6c9; }
+      .case.fail { border-color: #f3c1c1; background: #fff5f5; }
+      .case b { flex: none; width: 46px; font-size: 12px; }
+      .case.pass b { color: #07c160; }
+      .case.fail b { color: #e53e3e; }
+      .case code { font-size: 12px; color: #4b5158; word-break: break-all; }
+      .status { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div class="header"><h1>KEditor 冒烟测试</h1><span class="status" id="summary">运行中…</span></div>
+    <main>
+      <div class="card" style="margin-bottom: 16px">
+        <h2>测试用例</h2>
+        <div class="body"><div id="results"></div></div>
+      </div>
+      <div class="card">
+        <h2>被测编辑器（隐藏交互区）</h2>
+        <div class="body tight"><div id="editor"></div></div>
+      </div>
+    </main>
+
+    <script src="../dist/keditor.umd.js"></script>
+    <script>
+      const results = document.getElementById('results')
+      const summary = document.getElementById('summary')
+      const jsErrors = []
+      window.addEventListener('error', (e) => jsErrors.push(String(e.message)))
+      window.addEventListener('unhandledrejection', (e) => jsErrors.push('promise: ' + String(e.reason)))
+
+      const cases = []
+      function check(name, ok, detail) {
+        cases.push({ name, ok: !!ok, detail })
+        const row = document.createElement('div')
+        row.className = 'case ' + (ok ? 'pass' : 'fail')
+        row.innerHTML = `<b>${ok ? 'PASS' : 'FAIL'}</b><span>${name}</span><code>${detail ?? ''}</code>`
+        results.appendChild(row)
+        if (!ok) console.error('CASE FAIL:', name, '|', detail)
+      }
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+      function randomBytes(size) {
+        const bytes = new Uint8Array(size)
+        ;(window.crypto || window.msCrypto).getRandomValues(bytes.subarray(0, Math.min(size, 65536)))
+        for (let i = 65536; i < size; i += 1) bytes[i] = bytes[i % 65536]
+        return bytes
+      }
+      function noiseFile(name, type, size) {
+        return new File([randomBytes(size)], name, { type })
+      }
+
+      // ---- 准备一个可上传的测试文件 ----
+      function makeImageFile(w = 900, h = 600) {
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        const grad = ctx.createLinearGradient(0, 0, w, h)
+        grad.addColorStop(0, '#07c160')
+        grad.addColorStop(1, '#2f6fed')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, w, h)
+        ctx.fillStyle = '#fff'
+        ctx.font = '48px sans-serif'
+        ctx.fillText('KEditor', 40, h / 2)
+        return new Promise((resolve) => {
+          canvas.toBlob((blob) => resolve(new File([blob], 'smoke-image.jpg', { type: 'image/jpeg' })), 'image/jpeg', 0.92)
+        })
+      }
+      function makeVideoFile(size = 1.2 * 1024 * 1024) {
+        const bytes = new Uint8Array(size)
+        for (let i = 0; i < size; i += 1) bytes[i] = (i * 7) % 251
+        return new File([bytes], 'smoke-video.mp4', { type: 'video/mp4' })
+      }
+
+      let chunkEvents = 0
+      let completeEvents = 0
+      const uploader = KEditor.mockAdapter({
+        speed: 6,
+        latency: 40,
+        onEvent: (type) => {
+          if (type === 'chunk') chunkEvents += 1
+          if (type === 'complete') completeEvents += 1
+        },
+      })
+
+      const editor = KEditor.create('#editor', {
+        value: '<p>初始内容</p>',
+        height: 260,
+        uploader,
+        image: { compress: false },
+        upload: { chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
+      })
+
+      // ---- 辅助：把光标放到末尾并选中整段 ----
+      function selectAll() {
+        editor.focus()
+        const range = document.createRange()
+        range.selectNodeContents(editor.root)
+        const sel = window.getSelection()
+        sel.removeAllRanges()
+        sel.addRange(range)
+      }
+
+      async function run() {
+        await sleep(60)
+        check('实例创建', editor && editor.root && editor.root.getAttribute('contenteditable') === 'true', `id=${editor?.id}`)
+        check('初始内容净化输出', editor.getHTML() === '<p>初始内容</p>', editor.getHTML())
+
+        // 富文本指令
+        selectAll()
+        editor.commands.toggleMark('bold')
+        check('加粗生效', /font-weight:\s*bold/.test(editor.getHTML()), editor.getHTML())
+        editor.commands.toggleMark('bold')
+
+        selectAll()
+        editor.commands.setColor('fore', '#07c160')
+        check('字体颜色', /color:\s*rgb\(7,\s*193,\s*96\)|color:\s*#07c160/i.test(editor.getHTML()), editor.getHTML())
+
+        selectAll()
+        editor.commands.setFontSize(20)
+        check('自定义字号', /font-size:\s*20px/.test(editor.getHTML()), editor.getHTML())
+
+        selectAll()
+        editor.commands.setAlign('center')
+        check('居中对齐', /text-align:\s*center/.test(editor.getHTML()), editor.getHTML())
+
+        selectAll()
+        editor.commands.toggleList('ordered')
+        check('有序列表', /<ol/.test(editor.getHTML()), editor.getHTML())
+        editor.commands.toggleList('ordered')
+
+        editor.commands.setHeading('h2')
+        check('标题转换', /<h2/.test(editor.getHTML()), editor.getHTML())
+        editor.commands.setHeading('p')
+
+        selectAll()
+        editor.commands.toggleBlockquote()
+        check('引用块', /<blockquote/.test(editor.getHTML()), editor.getHTML())
+        editor.commands.toggleBlockquote()
+
+        selectAll()
+        editor.commands.createLink({ url: 'https://example.com', text: '示例链接', target: true })
+        check('插入链接', /<a[^>]+href="https:\/\/example\.com"[^>]*target="_blank"/.test(editor.getHTML()), editor.getHTML())
+        editor.commands.removeLink()
+        check('移除链接', !/<a /.test(editor.getHTML()), editor.getHTML())
+
+        editor.commands.insertTable(3, 2)
+        check('插入表格', /<table[\s\S]*?<td/.test(editor.getHTML()), (editor.getHTML().match(/<t[dh]/g) || []).length + ' 个单元格')
+
+        editor.commands.insertCodeBlock()
+        check('插入代码块', /<pre><code/.test(editor.getHTML()), '')
+
+        editor.commands.insertDivider()
+        check('插入分割线', /<hr/.test(editor.getHTML()), '')
+
+        // 撤销 / 重做
+        const before = editor.getHTML()
+        editor.undo()
+        const afterUndo = editor.getHTML()
+        check('撤销生效', afterUndo !== before, afterUndo.slice(0, 60))
+        editor.redo()
+        check('重做生效', editor.getHTML() !== afterUndo, '')
+
+        // XSS 与危险协议
+        editor.setContent('<p>x</p><img src=x onerror="alert(1)"><a href="javascript:alert(2)">y</a><script>alert(3)<\/script><iframe src="https://evil.com"></iframe>')
+        const safe = editor.getHTML()
+        check('事件属性被清除', !/onerror/i.test(safe), safe.slice(0, 90))
+        check('javascript: 协议被拦截', !/javascript:/i.test(safe), safe.slice(0, 90))
+        check('script/iframe 被移除', !/<script|<iframe/i.test(safe), safe.slice(0, 90))
+
+        // Word 粘贴清洗
+        const word = '<p class="MsoNormal"><font size="4" color="#FF0000">Word 文本</font><span style="mso-fareast-font-family:宋体">样式</span></p><o:p>&nbsp;</o:p>'
+        const cleaned = KEditor.cleanWordHtml(word)
+        editor.setContent(cleaned)
+        const out = editor.getHTML()
+        check('Word 标签清洗', !/mso-|<o:p|MsoNormal/i.test(out) && /font-size:\s*18px/.test(out), out)
+
+        // 图片分片上传（用 900KB 噪声文件保证多片）
+        chunkEvents = 0
+        completeEvents = 0
+        const imgResult = await editor.media.upload(noiseFile('smoke-image.jpg', 'image/jpeg', 900 * 1024), 'image')
+        check('图片上传成功', imgResult && /^blob:/.test(imgResult.url) && /<img src="blob:/.test(editor.getHTML()), `url=${(imgResult?.url || '').slice(0, 40)}…`)
+        check('图片走了多分片', chunkEvents > 1 && completeEvents === 1, `分片请求 ${chunkEvents} 次`)
+        check('导出清理内部属性', !/data-k-id|contenteditable="false"/.test(editor.getHTML()), '')
+
+        // 视频分片上传（1.2MB / 256KB = 5 片）
+        const videoFile = noiseFile('smoke-video.mp4', 'video/mp4', 1.2 * 1024 * 1024)
+        chunkEvents = 0
+        completeEvents = 0
+        const vidResult = await editor.media.upload(videoFile, 'video')
+        check('视频上传成功', vidResult && /<video[^>]+controls/.test(editor.getHTML()), (vidResult?.url || '').slice(0, 40))
+        check('视频按 256KB 切片', chunkEvents >= 5, `分片数 ${chunkEvents}（1.2MB / 256KB）`)
+
+        // 秒传（同一文件再传一次应命中缓存）
+        chunkEvents = 0
+        const again = await editor.media.upload(videoFile, 'video')
+        check('相同文件秒传', again?.instant === true && chunkEvents === 0, again?.instant ? 'instant=true' : String(again?.instant))
+
+        // 源码模式
+        editor.enterSource()
+        const formatted = editor.source.value
+        check('源码模式打开', editor.sourceMode && /<p>/.test(formatted), formatted.split('\n').length + ' 行')
+        check('源码格式化换行', formatted.includes('\n<') || formatted.includes('\n<'), '')
+        editor.source.value = '<p>源码改写</p><h3>来自源码模式</h3>'
+        editor.exitSource()
+        check('源码改写回填', /源码改写/.test(editor.getHTML()) && /<h3>/.test(editor.getHTML()), editor.getHTML())
+
+        // 预览
+        editor.openPreview()
+        check('预览渲染', editor.previewMode && editor.previewPanel.content.innerHTML.includes('源码改写'), '')
+        editor.closePreview()
+
+        // 只读 / 统计 / 事件 / 销毁
+        editor.setReadOnly(true)
+        check('只读模式', editor.root.getAttribute('contenteditable') === 'false', '')
+        editor.setReadOnly(false)
+
+        let changeFired = 0
+        editor.on('change', () => (changeFired += 1))
+        editor.setContent('<p>触发变更</p>')
+        await sleep(240)
+        check('change 事件', changeFired > 0, `fired=${changeFired}`)
+
+        const counts = editor.counts()
+        check('字数统计', counts.chars > 0 && counts.images >= 0, JSON.stringify(counts))
+
+        // 取消上传
+        const slow = KEditor.create(document.createElement('div'), {
+          uploader: KEditor.mockAdapter({ speed: 0.6, latency: 200 }),
+          upload: { chunkSize: 128 * 1024 },
+          image: { compress: false },
+        })
+        const task = await (async () => {
+          const blob = new Blob([randomBytes(700 * 1024)], { type: 'image/png' })
+          const p = slow.media.upload(new File([blob], 'slow.png', { type: 'image/png' }), 'image')
+          await sleep(120)
+          const t = [...slow.media.tasks.values()][0]
+          return p.then((r) => ({ r, t }))
+        })()
+        check('上传中占位块存在', !!task.t && /data-k-id/.test(slow.root.innerHTML), task.t ? 'state=' + task.t.holder.dataset.kState : 'no task')
+        task.t.ctrl.abort()
+        await task.then
+        await sleep(40)
+        check('取消后占位块移除', !/data-k-state="uploading"/.test(slow.root.innerHTML), '')
+        slow.destroy()
+
+        // 块级提升：光标在标题内时插入媒体不应嵌套进 h2
+        editor.setContent('<h2>标题内插图</h2><p>后续段落</p>')
+        const h2 = editor.root.querySelector('h2')
+        const h2Range = document.createRange()
+        h2Range.selectNodeContents(h2)
+        h2Range.collapse(false)
+        const h2Sel = window.getSelection()
+        h2Sel.removeAllRanges()
+        h2Sel.addRange(h2Range)
+        await editor.upload(noiseFile('in-heading.png', 'image/png', 120 * 1024), 'image')
+        check('媒体不嵌套进标题', !editor.root.querySelector('h2 figure') && editor.root.querySelector('h2 + figure'), editor.getHTML().slice(0, 120))
+        editor.setContent('<p>恢复</p>')
+
+        // 对外媒体 API
+        editor.insertImage('https://example.com/logo.png', '站点图标')
+        check('insertImage 按地址插图', /<img src="https:\/\/example\.com\/logo\.png" alt="站点图标"/.test(editor.getHTML()), '')
+        editor.insertVideo('https://example.com/a.mp4', '宣传片')
+        check('insertVideo 按地址插视频', /<video src="https:\/\/example\.com\/a\.mp4" controls/.test(editor.getHTML()), '')
+        const apiUpload = await editor.upload(noiseFile('api-file.png', 'image/png', 300 * 1024))
+        check('editor.upload 自动识别类型', apiUpload && /^blob:/.test(apiUpload.url), `url=${(apiUpload?.url || '').slice(0, 36)}…`)
+        const pending = editor.upload(noiseFile('pending.png', 'image/png', 2 * 1024 * 1024))
+        await sleep(80)
+        editor.cancelUploads()
+        await pending
+        check('cancelUploads 可中断', editor.media.tasks.size === 0 && !/data-k-state="uploading"/.test(editor.getHTML()), `tasks=${editor.media.tasks.size}`)
+        editor.root.querySelectorAll('[data-k-media]').forEach((n) => n.remove())
+
+        // 图片气泡工具条
+        const mediaNode = editor.root.querySelector('[data-k-media="image"]') || editor.insertImage('https://example.com/x.png', 'x').parentNode
+        editor.bubble.show(editor.root.querySelector('[data-k-media="image"]'))
+        await sleep(30)
+        const bubbleBtns = editor.bubble.el.querySelectorAll('button').length
+        check('气泡工具条渲染按钮', !editor.bubble.el.hidden && bubbleBtns >= 8 && !/object HTML/.test(editor.bubble.el.textContent), `${bubbleBtns} 个按钮`)
+        editor.bubble.hide()
+
+        // 工具栏交互
+        const tableBtn = editor.el.querySelector('[data-k-item="table"]')
+        tableBtn.click()
+        await sleep(20)
+        check('表格弹层打开', !editor.popover.el.hidden, '')
+        editor.popover.el.querySelector('.ke-table-cell').click()
+        await sleep(20)
+        check('弹层选择表格', editor.popover.el.hidden && /<table/.test(editor.getHTML()), '')
+
+        selectAll()
+        const colorBtn = editor.el.querySelector('[data-k-item="foreColor"]')
+        colorBtn.click()
+        await sleep(20)
+        const swatches = editor.popover.el.querySelectorAll('.ke-sw')
+        check('颜色按钮一次点击即展开面板', !editor.popover.el.hidden && swatches.length > 16, `${swatches.length} 个色块`)
+        check('颜色面板含分区与自定义取色', !!editor.popover.el.querySelector('.ke-panel-sect') && !!editor.popover.el.querySelector('.ke-sw-picker') && !!editor.popover.el.querySelector('.ke-sw-hex'), '')
+        const htmlBeforeColor = editor.getHTML()
+        editor.popover.el.querySelectorAll('.ke-sw')[0].click()
+        await sleep(20)
+        check('选色后上色并关闭面板', editor.popover.el.hidden && /color:\s*(#07c160|rgb\(7, 193, 96\))/i.test(editor.getHTML()), editor.getHTML().slice(0, 80))
+        colorBtn.click()
+        await sleep(20)
+        check('最近使用记录已生效', editor.popover.el.querySelectorAll('.ke-sw-grid').length >= 3, '')
+        colorBtn.click()
+        await sleep(20)
+        check('再次点击同一颜色按钮关闭面板', editor.popover.el.hidden, '')
+
+        // 段落样式面板：标题含义说明
+        const headingBtn = editor.el.querySelector('[data-k-item="heading"]')
+        headingBtn.click()
+        await sleep(20)
+        const hdRows = editor.popover.el.querySelectorAll('.ke-hd-row')
+        check('段落样式面板 4 个层级', hdRows.length === 4, `${hdRows.length} 行`)
+        check('段落样式含用途描述', [...hdRows].every((r) => (r.querySelector('.ke-hd-desc')?.textContent || '').length > 6), '')
+        check('标题一说明大标题用途', /大标题/.test([...hdRows].map((r) => r.textContent).join('')), '')
+        hdRows[1].click()
+        await sleep(20)
+        check('选择标题一生成 h1', /<h1/.test(editor.getHTML()) && editor.popover.el.hidden, '')
+        const h1Node = editor.root.querySelector('h1')
+        const inH1 = document.createRange()
+        inH1.selectNodeContents(h1Node.firstChild || h1Node)
+        inH1.collapse(true)
+        const selH1 = window.getSelection()
+        selH1.removeAllRanges()
+        selH1.addRange(inH1)
+        editor.refresh()
+        check('段落按钮文案跟随当前层级', headingBtn.querySelector('.ke-btn-text').textContent === '标题一', headingBtn.querySelector('.ke-btn-text').textContent)
+        const h2Row = (() => { headingBtn.click(); return [...editor.popover.el.querySelectorAll('.ke-hd-row')][2] })()
+        h2Row.click()
+        await sleep(20)
+        check('选中标题二生成 h2', /<h2/.test(editor.getHTML()), '')
+
+        // 字号面板
+        const fsBtn = editor.el.querySelector('[data-k-item="fontsize"]')
+        fsBtn.click()
+        await sleep(20)
+        check('字号面板打开', editor.popover.el.querySelectorAll('.ke-size-cell').length >= 8, '')
+        editor.popover.close()
+
+        // 图片 / 视频：链接插入
+        const imageBtn = editor.el.querySelector('[data-k-item="image"]')
+        imageBtn.click()
+        await sleep(20)
+        check('图片面板含本地/链接两个页签', editor.popover.el.querySelectorAll('.ke-tab').length === 2 && !!editor.popover.el.querySelector('.ke-drop'), '')
+        editor.popover.el.querySelectorAll('.ke-tab')[1].click()
+        await sleep(20)
+        const imgUrlInput = [...editor.popover.el.querySelectorAll('.ke-input')][0]
+        imgUrlInput.value = 'https://cdn.example.com/a.png'
+        imgUrlInput.dispatchEvent(new Event('input'))
+        await sleep(20)
+        const imgInsert = [...editor.popover.el.querySelectorAll('.ke-btn-primary')].pop()
+        check('图片链接合法即启用插入', imgInsert.disabled === false, '')
+        imgInsert.click()
+        await sleep(30)
+        check('网络图片已插入', /src="https:\/\/cdn\.example\.com\/a\.png"/.test(editor.getHTML()) && editor.popover.el.hidden, '')
+
+        const videoBtn = editor.el.querySelector('[data-k-item="video"]')
+        videoBtn.click()
+        await sleep(20)
+        editor.popover.el.querySelectorAll('.ke-tab')[1].click()
+        await sleep(20)
+        const vUrl = [...editor.popover.el.querySelectorAll('.ke-input')][0]
+        vUrl.value = 'https://cdn.example.com/clip.mp4'
+        vUrl.dispatchEvent(new Event('input'))
+        await sleep(20)
+        ;[...editor.popover.el.querySelectorAll('.ke-btn-primary')].pop().click()
+        await sleep(30)
+        check('网络视频已插入', /<video[^>]+src="https:\/\/cdn\.example\.com\/clip\.mp4"/.test(editor.getHTML()), '')
+        editor.root.querySelectorAll('[data-k-media]').forEach((n) => n.remove())
+
+        // 源码模式切换按钮常驻工具栏右侧
+        const sourceBtn = editor.el.querySelector('[data-k-item="source"]')
+        check('源码按钮存在且带文字', !!sourceBtn && /源码/.test(sourceBtn.textContent), sourceBtn?.textContent || '')
+        check('源码按钮固定于尾部', !!sourceBtn.closest('.ke-tb-tail'), '')
+        editor.toggleSource()
+        await sleep(20)
+        check('源码模式置灰正文按钮', editor.el.classList.contains('ke-is-source') && sourceBtn.classList.contains('ke-is-active'), '')
+        editor.toggleSource()
+        await sleep(20)
+        check('退出源码模式恢复', !editor.el.classList.contains('ke-is-source'), '')
+
+        check('无 JS 运行时错误', jsErrors.length === 0, jsErrors.join(' | ').slice(0, 160))
+
+        // beforeUpload 钩子
+        let hookCalled = 0
+        const hooked = KEditor.create(document.createElement('div'), {
+          uploader,
+          image: { compress: false },
+          upload: { chunkSize: 256 * 1024 },
+          beforeUpload: (file, kind) => {
+            hookCalled += 1
+            return kind === 'video' ? false : file
+          },
+        })
+        await hooked.upload(noiseFile('blocked.mp4', 'video/mp4', 200 * 1024))
+        check('beforeUpload 可拦截上传', hookCalled === 1 && !/blocked\.mp4/.test(hooked.getHTML()) && hooked.media.tasks.size === 0, `called=${hookCalled}`)
+        hooked.destroy()
+
+        editor.destroy()
+        check('销毁后清空容器', document.getElementById('editor').innerHTML === '' && !document.getElementById('editor').classList.contains('ke'), '')
+
+        const failed = cases.filter((c) => !c.ok)
+        summary.textContent = `${cases.length - failed.length}/${cases.length} 通过` + (failed.length ? ` · ${failed.length} 失败` : '')
+        summary.style.color = failed.length ? '#e53e3e' : '#07c160'
+        window.__TEST_DONE__ = true
+        window.__TEST_ERRORS__ = jsErrors
+        window.__TEST_FAILED__ = failed.map((c) => `${c.name} :: ${c.detail ?? ''}`)
+      }
+
+      run().catch((error) => {
+        summary.textContent = '测试异常：' + error.message
+        summary.style.color = '#e53e3e'
+        check('运行未抛异常', false, error.stack || error.message)
+        window.__TEST_DONE__ = true
+        window.__TEST_FAILED__ = ['crash: ' + error.message]
+      })
+    </script>
+  </body>
+</html>

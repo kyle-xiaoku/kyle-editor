@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KEditor · Script 引入 Demo</title>
+    <link rel="stylesheet" href="assets/demo.css" />
+  </head>
+  <body>
+    <div class="header">
+      <h1>Script 引入</h1>
+      <span class="tag">UMD · window.KEditor</span>
+      <div class="nav">
+        <a class="btn" href="../index.html">首页</a>
+        <a class="btn" href="esm.html">ESM</a>
+        <a class="btn" href="vue.html">Vue</a>
+      </div>
+    </div>
+
+    <main>
+      <div class="grid">
+        <section class="card">
+          <h2>编辑器 <span class="hint" style="margin-left: auto">拖拽 / 粘贴即可分片上传，也可在面板里直接填网络链接</span></h2>
+          <div class="body tight"><div id="editor"></div></div>
+        </section>
+
+        <aside style="display: flex; flex-direction: column; gap: 18px">
+          <section class="card">
+            <h2>操作</h2>
+            <div class="body">
+              <div class="row-btns">
+                <button class="btn btn-primary" id="btn-get">获取 HTML</button>
+                <button class="btn" id="btn-set">填入示例内容</button>
+                <button class="btn" id="btn-readonly">切换只读</button>
+                <button class="btn" id="btn-clear">清空</button>
+              </div>
+              <div class="row-btns">
+                <button class="btn" id="btn-source">源码模式</button>
+                <button class="btn" id="btn-preview">预览</button>
+                <button class="btn" id="btn-destroy" style="color: #e53e3e">销毁实例</button>
+              </div>
+              <dl class="kv" style="margin-top: 14px">
+                <dt>chunkSize</dt>
+                <dd><code class="inline">256 KB</code>（演示值，默认 1 MB）</dd>
+                <dt>并发</dt>
+                <dd>3 · 重试 2 次</dd>
+                <dt>适配器</dt>
+                <dd>内置 mock（无需后端）</dd>
+              </dl>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>上传事件（分片日志）</h2>
+            <div class="body tight"><div class="log" id="log"></div></div>
+          </section>
+
+          <section class="card">
+            <h2>当前 HTML</h2>
+            <div class="body"><pre class="out" id="out">（点击上方「获取 HTML」）</pre></div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <script src="../dist/keditor.umd.js"></script>
+    <script>
+      const log = document.getElementById('log')
+      const out = document.getElementById('out')
+
+      function addLog(tag, text, isErr) {
+        const row = document.createElement('div')
+        row.className = 'row' + (isErr ? ' err' : '')
+        row.innerHTML = `<time>${new Date().toLocaleTimeString()}</time><b>${tag}</b><span>${text}</span>`
+        log.prepend(row)
+        while (log.childElementCount > 40) log.lastElementChild.remove()
+      }
+
+      // 分片适配器：演示用 mock（不请求任何服务），换成 {type:'http'} 即对接后端
+      const uploader = KEditor.mockAdapter({
+        speed: 8, // 模拟带宽 MB/s
+        latency: 120,
+        onEvent: (type, payload) => {
+          if (type === 'chunk') addLog('分片', `#${payload.index + 1}/${payload.total} · ${(payload.size / 1024).toFixed(0)}KB`)
+          else if (type === 'init') addLog('初始化', `${payload.name} 共 ${payload.totalChunks} 片`)
+          else if (type === 'complete') addLog('合并完成', `${payload.name} → ${(payload.url || '').slice(0, 42)}…`)
+          else if (type === 'instant') addLog('秒传命中', payload.name)
+          else if (type === 'chunk-error') addLog('分片失败→自动重试', payload.message, true)
+        },
+      })
+
+      const editor = KEditor.create('#editor', {
+        value: '<p>试试：从桌面拖一张图片或一段视频到这里。</p>',
+        placeholder: '开始撰写内容…',
+        height: 420,
+        uploader,
+        upload: { chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
+        image: { compress: { maxWidth: 1600, quality: 0.85 } },
+        maxVideoSize: 200 * 1024 * 1024,
+        onChange: () => {
+          out.textContent = '（内容已变化，点「获取 HTML」查看完整结果）'
+        },
+      })
+
+      editor.on('ready', () => addLog('ready', '编辑器已挂载'))
+      editor.on('uploaderror', (e) => addLog('上传异常', e.error.message, true))
+
+      document.getElementById('btn-get').onclick = () => {
+        out.textContent = editor.getHTML()
+      }
+      document.getElementById('btn-set').onclick = () => {
+        editor.setContent(`
+          <h2>标题示例</h2>
+          <p>正文样式对齐公众号：<span style="color:#07c160">彩色文字</span>、<span style="background-color:#fef08a">高亮</span>、<strong>加粗</strong>。</p>
+          <blockquote>引用段落示例</blockquote>
+          <ul><li>无序列表项</li><li>另一项</li></ul>
+          <ol><li>有序列表</li><li>第二点</li></ol>
+          <table><tbody><tr><th>项目</th><th>说明</th></tr><tr><td>分片上传</td><td>256KB/片</td></tr></tbody></table>
+          <pre><code>console.log('代码块')</code></pre>
+          <p><a href="https://mp.weixin.qq.com" target="_blank" rel="noopener noreferrer">一个链接</a></p>
+          <hr>
+          <p>—— 结束</p>`)
+        out.textContent = '（已填入示例，点「获取 HTML」查看）'
+        addLog('setContent', '示例内容已写入')
+      }
+      document.getElementById('btn-readonly').onclick = (event) => {
+        editor.setReadOnly(!editor.readOnly)
+        event.target.textContent = editor.readOnly ? '关闭只读' : '切换只读'
+        addLog('只读', String(editor.readOnly))
+      }
+      document.getElementById('btn-clear').onclick = () => {
+        editor.clear()
+        out.textContent = ''
+      }
+      document.getElementById('btn-source').onclick = () => editor.toggleSource()
+      document.getElementById('btn-preview').onclick = () => editor.togglePreview()
+      document.getElementById('btn-destroy').onclick = () => {
+        editor.destroy()
+        addLog('destroy', '实例已销毁，刷新页面可重建', true)
+      }
+    </script>
+  </body>
+</html>

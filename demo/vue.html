@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KEditor · Vue 3 集成 Demo</title>
+    <link rel="stylesheet" href="assets/demo.css" />
+    <style>
+      [v-cloak] { display: none; }
+      .toolbar-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Vue 3 集成</h1>
+      <span class="tag">&lt;k-editor v-model="html" /&gt;</span>
+      <div class="nav">
+        <a class="btn" href="../index.html">首页</a>
+        <a class="btn" href="script.html">Script</a>
+        <a class="btn" href="esm.html">ESM</a>
+      </div>
+    </div>
+
+    <main>
+      <div id="app" v-cloak>
+        <div class="grid">
+          <section class="card">
+            <h2>
+              编辑器组件
+              <span class="hint" style="margin-left: auto">v-model 与源码模式联动 · 图片视频支持本地上传 / 网络链接</span>
+            </h2>
+            <div class="body tight">
+              <k-editor ref="editorRef" v-model="html" :options="options" :disabled="disabled" @upload="onUpload" @ready="onReady"></k-editor>
+            </div>
+          </section>
+
+          <aside style="display: flex; flex-direction: column; gap: 18px">
+            <section class="card">
+              <h2>组件状态</h2>
+              <div class="body">
+                <div class="toolbar-row">
+                  <label class="opt"><input type="checkbox" v-model="disabled" /> 禁用（只读）</label>
+                  <button class="btn" @click="fillDemo">写入示例</button>
+                  <button class="btn btn-primary" @click="showHtml = !showHtml">{{ showHtml ? '隐藏' : '查看' }} HTML</button>
+                </div>
+                <dl class="kv">
+                  <dt>字数</dt>
+                  <dd>{{ chars }}</dd>
+                  <dt>图片/视频</dt>
+                  <dd>{{ stats.images }} / {{ stats.videos }}</dd>
+                  <dt>上传中</dt>
+                  <dd>{{ uploading }}</dd>
+                  <dt>最近事件</dt>
+                  <dd>{{ lastEvent }}</dd>
+                </dl>
+              </div>
+            </section>
+            <section class="card" v-show="showHtml">
+              <h2>v-model 绑定值</h2>
+              <div class="body"><pre class="out">{{ html }}</pre></div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <script src="vendor/vue.global.prod.js"></script>
+    <script src="../dist/keditor.umd.js"></script>
+    <script src="../dist/keditor-vue.umd.js"></script>
+    <script>
+      const { createApp, ref, computed, onMounted } = Vue
+      const plugin = KEditorVue.default || KEditorVue.KEditorPlugin
+
+      const App = {
+        setup() {
+          const html = ref('<p>Vue 中使用 KEditor：v-model 直接绑定 HTML 字符串。</p>')
+          const disabled = ref(false)
+          const showHtml = ref(false)
+          const uploading = ref(0)
+          const lastEvent = ref('-')
+          const stats = ref({ images: 0, videos: 0, chars: 0 })
+          const editorRef = ref(null)
+
+          const options = {
+            placeholder: 'Vue 组件里同样支持拖拽 / 粘贴上传…',
+            height: 420,
+            // 默认使用内置 mock 适配器（无需后端），对接真实服务改成：
+            // uploader: { type: 'http', initUrl: '/api/upload/init', chunkUrl: '/api/upload/chunk', completeUrl: '/api/upload/complete' }
+            uploader: 'mock',
+            upload: { chunkSize: 512 * 1024, concurrency: 3 },
+          }
+
+          const chars = computed(() => stats.value.chars)
+
+          const onUpload = (payload) => {
+            lastEvent.value = `${payload.stage}${payload.percent !== undefined ? ' ' + payload.percent + '%' : ''}`
+            if (payload.stage === 'uploadstart') uploading.value += 1
+            if (['uploaddone', 'uploaderror', 'uploadcancel'].includes(payload.stage)) uploading.value = Math.max(0, uploading.value - 1)
+            syncStats()
+          }
+          const onReady = () => syncStats()
+          const syncStats = () => {
+            const editor = editorRef.value?.editor
+            if (!editor) return
+            stats.value = editor.counts()
+          }
+          const fillDemo = () => {
+            html.value = '<h2>来自父组件的赋值</h2><p><span style="color:#07c160">watch(modelValue)</span> 会同步到编辑器内容。</p>'
+            setTimeout(syncStats, 60)
+          }
+
+          onMounted(() => setInterval(syncStats, 1200))
+
+          return { html, options, disabled, showHtml, uploading, lastEvent, stats, chars, onUpload, onReady, fillDemo, editorRef }
+        },
+      }
+
+      createApp(App).use(plugin).mount('#app')
+    </script>
+  </body>
+</html>

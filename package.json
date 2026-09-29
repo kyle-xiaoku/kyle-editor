@@ -1,0 +1,77 @@
+{
+  "name": "kyle-editor",
+  "version": "1.0.0",
+  "description": "轻量、美观的微信公众号风格富文本编辑器（纯前端，支持图片/视频分片上传、HTML 源码模式），可通过 <script> 引入或作为 Vue 3 组件安装。",
+  "type": "module",
+  "main": "./dist/keditor.cjs",
+  "module": "./dist/keditor.es.js",
+  "unpkg": "./dist/keditor.umd.js",
+  "jsdelivr": "./dist/keditor.umd.js",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/keditor.es.js",
+      "require": "./dist/keditor.cjs"
+    },
+    "./vue": {
+      "types": "./types/vue.d.ts",
+      "import": "./dist/keditor-vue.es.js",
+      "require": "./dist/keditor-vue.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": true,
+  "files": [
+    "dist",
+    "src",
+    "types",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "build": "vite build --config vite.config.core.js && vite build --config vite.config.vue.js",
+    "dev": "python3 -m http.server 5178 --bind 127.0.0.1",
+    "test": "node test/run-headless.mjs",
+    "test:pages": "node test/check-page.mjs",
+    "test:types": "node test/check-types.mjs",
+    "test:package": "node test/check-package.mjs",
+    "test:visual": "node test/shoot.mjs rich,uploading,bubble,source,preview,color,heading,media,link",
+    "clean": "rm -rf dist",
+    "verify": "npm run build && npm test && npm run test:pages && npm run test:types && npm run test:package",
+    "pack:check": "npm run build && npm run test:package && npm pack --dry-run",
+    "prerelease": "npm run verify",
+    "release": "npm publish --access public",
+    "release:beta": "npm publish --access public --tag beta"
+  },
+  "keywords": [
+    "richtext",
+    "editor",
+    "wechat",
+    "富文本编辑器",
+    "chunk-upload",
+    "分片上传",
+    "vue3"
+  ],
+  "license": "MIT",
+  "author": "kyle <zhendong.li@edoctor.cn>",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "vite": "^5.4.21",
+    "vue": "^3.5.43"
+  }
+}

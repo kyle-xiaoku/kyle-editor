@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KEditor 视觉验证</title>
+    <link rel="stylesheet" href="../demo/assets/demo.css" />
+    <style>
+      body { background: #eef0f3; }
+      main { max-width: 1100px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>视觉验证</h1>
+      <span class="tag" id="state-tag">state=default</span>
+      <div class="nav"><a class="btn" href="../demo/script.html">返回 Demo</a></div>
+    </div>
+    <main>
+      <div class="card">
+        <h2 id="desc">编辑器外观</h2>
+        <div class="body tight"><div id="editor"></div></div>
+      </div>
+    </main>
+
+    <script src="../dist/keditor.umd.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search)
+      const state = params.get('state') || 'rich'
+      document.getElementById('state-tag').textContent = 'state=' + state
+
+      const RICH = `
+        <h2>微信公众号排版风格</h2>
+        <p>正文默认 <span style="color:#07c160">17px</span>、行距 1.75，支持<span style="background-color:#fef08a">高亮标注</span>、<strong>加粗</strong>、<em>斜体</em>与<del>删除线</del>。</p>
+        <h3>小标题</h3>
+        <blockquote>「好的编辑器应当让人专注于内容本身。」</blockquote>
+        <ul><li>拖拽 / 粘贴即可上传</li><li>大文件自动分片，失败自动重试</li></ul>
+        <ol><li>选择文件</li><li>分片并发传输</li><li>合并返回地址</li></ol>
+        <table><tbody>
+          <tr><th>能力</th><th>说明</th></tr>
+          <tr><td>分片上传</td><td>默认 1MB/片，可配并发与重试</td></tr>
+          <tr><td>源码模式</td><td>格式化、复制、可直接改写</td></tr>
+        </tbody></table>
+        <pre><code>const editor = KEditor.create('#editor', {\n  uploader: { type: 'http', initUrl: '/api/upload/init' }\n})</code></pre>
+        <p>再看一个<A href="https://mp.weixin.qq.com" target="_blank" rel="noopener noreferrer">外链</A>与分割线：</p>
+        <hr>
+        <p style="text-align:center"><span style="color:#8a8f99">居中说明文字</span></p>`
+
+      const editor = KEditor.create('#editor', {
+        value: RICH,
+        height: 520,
+        placeholder: '开始撰写内容…',
+        // 上传中状态故意限速，便于截图观察分片进度
+        uploader: state === 'uploading' ? KEditor.mockAdapter({ speed: 0.5, latency: 420 }) : 'mock',
+        upload: { chunkSize: 200 * 1024, concurrency: 3 },
+        image: { compress: false },
+      })
+      window.__editor = editor
+
+      function noiseFile(name, type, size) {
+        const bytes = new Uint8Array(size)
+        crypto.getRandomValues(bytes.subarray(0, Math.min(size, 65536)))
+        for (let i = 65536; i < size; i += 1) bytes[i] = bytes[i % 65536]
+        return new File([bytes], name, { type })
+      }
+      function canvasFile(name, w, h, color, label) {
+        const c = document.createElement('canvas')
+        c.width = w
+        c.height = h
+        const ctx = c.getContext('2d')
+        const g = ctx.createLinearGradient(0, 0, w, h)
+        g.addColorStop(0, color)
+        g.addColorStop(1, '#1f2329')
+        ctx.fillStyle = g
+        ctx.fillRect(0, 0, w, h)
+        ctx.fillStyle = '#fff'
+        ctx.font = `600 ${Math.round(h / 6)}px sans-serif`
+        ctx.fillText(label, 32, h / 2)
+        return new Promise((resolve) => c.toBlob((blob) => resolve(new File([blob], name, { type: 'image/png' })), 'image/png'))
+      }
+
+      // 让 window.__ready 供截图脚本等待
+      window.__ready = false
+      async function boot() {
+        if (state === 'rich') {
+          document.getElementById('desc').textContent = '排版效果 + 已完成图片'
+          const img = await canvasFile('cover.png', 900, 380, '#07c160', 'KEditor 图片')
+          await editor.upload(img, 'image')
+        } else if (state === 'uploading') {
+          document.getElementById('desc').textContent = '上传中：分片进度占位块（大文件正在传输）'
+          editor.focus()
+          editor.setContent(RICH + '<p>下面正在上传：</p>')
+          editor.upload(await canvasFile('photo-a.png', 720, 420, '#2f6fed', '图片上传中'), 'image')
+          editor.upload(noiseFile('lecture-demo.mp4', 'video/mp4', 2400 * 1024), 'video')
+          await new Promise((r) => setTimeout(r, 1200))
+          editor.scrollEl.scrollTop = editor.scrollEl.scrollHeight
+        } else if (state === 'bubble') {
+          document.getElementById('desc').textContent = '图片气泡工具条（点击已上传图片）'
+          editor.setContent('<p>选中图片后会出现快捷操作条：</p>')
+          const img = await canvasFile('pic.png', 760, 340, '#ed8936', '选中图片后的浮层')
+          await editor.upload(img, 'image')
+          const node = editor.root.querySelector('[data-k-media="image"]')
+          const pic = node.querySelector('img')
+          pic.style.width = '60%'
+          pic.style.marginLeft = 'auto'
+          pic.style.marginRight = 'auto'
+          pic.style.borderRadius = '10px'
+          editor.scrollEl.scrollTop = 0
+          node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        } else if (state === 'source') {
+          document.getElementById('desc').textContent = 'HTML 源码模式（格式化 + 可编辑）'
+          editor.enterSource()
+        } else if (state === 'color') {
+          document.getElementById('desc').textContent = '字体颜色面板（点击工具栏「A」直接展开，含最近使用 / 主题色 / 标准色 / 自定义）'
+          const target = editor.root.querySelector('h1') || editor.root.querySelector('p')
+          const range = document.createRange()
+          range.selectNodeContents(target.firstChild || target)
+          const sel = window.getSelection()
+          sel.removeAllRanges()
+          sel.addRange(range)
+          editor.toolbar.buttons.get('foreColor').click()
+        } else if (state === 'heading') {
+          document.getElementById('desc').textContent = '段落样式下拉：每一档都写清用途与字号'
+          editor.toolbar.buttons.get('heading').click()
+        } else if (state === 'media') {
+          document.getElementById('desc').textContent = '图片插入面板：本地上传 / 网络链接双页签'
+          editor.setContent('<p>点工具栏图片按钮，可直接上传，也能粘贴网络图片地址。</p>')
+          editor.toolbar.buttons.get('image').click()
+        } else if (state === 'link') {
+          document.getElementById('desc').textContent = '视频插入面板：网络链接页签（自动校验可访问性）'
+          editor.setContent('<p>视频同样支持直接填入播放地址，不走上传。</p>')
+          editor.toolbar.buttons.get('video').click()
+          await new Promise((r) => setTimeout(r, 60))
+          editor.popover.el.querySelectorAll('.ke-tab')[1].click()
+          const urlInput = editor.popover.el.querySelector('.ke-tab-body:not([hidden]) .ke-input')
+          urlInput.value = 'https://media.w3.org/2013/05/sintel/trailer.mp4'
+          urlInput.dispatchEvent(new Event('input'))
+          await new Promise((r) => setTimeout(r, 900))
+        } else if (state === 'preview') {
+          document.getElementById('desc').textContent = '预览模式（电脑屏宽 677px）'
+          editor.openPreview()
+          editor.previewPanel.setDevice('pc')
+        }
+        window.__ready = true
+      }
+      boot()
+    </script>
+  </body>
+</html>
