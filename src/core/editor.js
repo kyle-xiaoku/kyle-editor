@@ -15,7 +15,7 @@ import { createUploader } from '../upload/adapters.js'
 import { attachDrop, attachPaste } from './paste.js'
 import { sanitizeHtml, toPlainText } from './sanitize.js'
 import { caretOffset, getRange, closestBlock } from './selection.js'
-import { debounce, h, clamp } from './utils.js'
+import { debounce, h, clamp, getMediaAlign } from './utils.js'
 
 const KB = 1024
 const MB = 1024 * KB
@@ -256,6 +256,8 @@ export class KEditor {
     this.clearMediaSelection()
     node.classList.add('ke-is-selected-media')
     this.bubble.show(node)
+    // 图片是 contenteditable=false，点击不触发 selectionchange，需手动刷新工具栏高亮
+    this.refreshStatus()
   }
 
   clearMediaSelection() {
@@ -274,6 +276,10 @@ export class KEditor {
     const range = getRange(this.root)
     const block = closestBlock(range?.commonAncestorContainer || this.root, this.root)
     const anchor = range ? findAnchor(range, this.root) : null
+    // 选中图片时，工具栏对齐按钮反映图片自身的对齐（margin auto），而非所在段落
+    const media = this.bubble?.node
+    const mediaImg = media && media.dataset?.kMedia === 'image' ? media.querySelector('img') : null
+    const align = mediaImg ? getMediaAlign(mediaImg) : currentAlign(range, block)
     return {
       bold: this.queryState('bold'),
       italic: this.queryState('italic'),
@@ -281,7 +287,7 @@ export class KEditor {
       strikeThrough: this.queryState('strikeThrough'),
       ul: this.queryState('insertUnorderedList'),
       ol: this.queryState('insertOrderedList'),
-      align: currentAlign(range, block),
+      align,
       block: block?.tagName?.toLowerCase() || 'p',
       fontSize: this.commands.currentFontSize(),
       linkUrl: anchor ? anchor.getAttribute('href') : '',
@@ -348,28 +354,6 @@ export class KEditor {
   }
 
   /* ------------------------------ 内容 API ------------------------------ */
-
-  /** 手动上传一个文件（自动判定图片/视频），等价于工具栏选择文件 */
-  upload(file, kind = this.media.kindOf(file)) {
-    if (!kind) throw new Error('[KEditor] 不支持的文件类型')
-    return this.media.upload(file, kind)
-  }
-
-  /** 按地址插入图片 */
-  insertImage(url, alt = '') {
-    return this.media.insertImageUrl(url, alt)
-  }
-
-  /** 按地址插入视频 */
-  insertVideo(url, label = '视频') {
-    return this.media.insertVideoUrl(url, label)
-  }
-
-  /** 取消全部进行中的上传任务 */
-  cancelUploads() {
-    this.media.cancelAll()
-    return this
-  }
 
   getHTML({ clean = true } = {}) {
     const html = this.root.innerHTML

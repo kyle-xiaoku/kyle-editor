@@ -288,6 +288,43 @@
         check('气泡工具条渲染按钮', !editor.bubble.el.hidden && bubbleBtns >= 8 && !/object HTML/.test(editor.bubble.el.textContent), `${bubbleBtns} 个按钮`)
         editor.bubble.hide()
 
+        // 图片鼠标拖拽缩放
+        const rFig = editor.root.querySelector('[data-k-media="image"]')
+        const rImg = rFig.querySelector('img')
+        rImg.style.width = '50%'
+        editor.bubble.show(rFig)
+        await sleep(30)
+        check('缩放手柄出现', editor.bubble.resizeEl.hidden === false, '')
+        check('缩放手柄不在内容区（不污染导出）', !editor.root.contains(editor.bubble.resizeEl), '')
+        const handleBox = editor.bubble.resizeEl.getBoundingClientRect()
+        const rBefore = rImg.getBoundingClientRect().width
+        const cx = handleBox.left + handleBox.width / 2
+        const cy = handleBox.top + handleBox.height / 2
+        editor.bubble.resizeEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: cx, clientY: cy, button: 0, bubbles: true }))
+        editor.bubble.resizeEl.dispatchEvent(new PointerEvent('pointermove', { clientX: cx - 80, clientY: cy, bubbles: true }))
+        editor.bubble.resizeEl.dispatchEvent(new PointerEvent('pointerup', { clientX: cx - 80, clientY: cy, bubbles: true }))
+        await sleep(20)
+        const rAfter = rImg.getBoundingClientRect().width
+        check('拖拽向左缩小图片宽度', rBefore > 0 && rAfter < rBefore - 10, `${rBefore.toFixed(1)} → ${rAfter.toFixed(1)}`)
+        check('拖拽结束气泡恢复', editor.bubble.el.hidden === false, '')
+        editor.bubble.hide()
+        check('取消选中后手柄隐藏', editor.bubble.resizeEl.hidden === true, '')
+
+        // 图片对齐：缩小后，工具栏与气泡两条入口都须真正使图片居中
+        editor.bubble.show(rFig)
+        await sleep(20)
+        editor.commands.setAlign('center')
+        await sleep(20)
+        {
+          const rr = rImg.getBoundingClientRect()
+          const ff = rFig.getBoundingClientRect()
+          const centered = Math.abs((rr.left - ff.left) - (ff.right - rr.right)) < 3
+          check('缩小后工具栏居中生效', rImg.style.marginLeft === 'auto' && centered, `ml=${rImg.style.marginLeft}`)
+          check('居中后工具栏按钮高亮', editor.getState().align === 'center', String(editor.getState().align))
+        }
+        editor.bubble.hide()
+        editor.root.querySelectorAll('[data-k-media]').forEach((n) => n.remove())
+
         // 工具栏交互
         const tableBtn = editor.el.querySelector('[data-k-item="table"]')
         tableBtn.click()
@@ -388,6 +425,72 @@
         editor.toggleSource()
         await sleep(20)
         check('退出源码模式恢复', !editor.el.classList.contains('ke-is-source'), '')
+
+        // ---- 工具栏溢出时的可滑动提示 ----
+        try { localStorage.removeItem('keditor.toolbarScrollHint') } catch { /* 忽略 */ }
+        const narrowWrap = document.createElement('div')
+        narrowWrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px'
+        document.body.appendChild(narrowWrap)
+        const narrow = KEditor.create(narrowWrap, { uploader, value: '<p>x</p>' })
+        await sleep(80)
+        const ntb = narrow.tbEl
+        check(
+          '窄屏工具栏确实溢出',
+          ntb.scrollWidth > ntb.clientWidth + 1,
+          `scrollWidth=${ntb.scrollWidth} clientWidth=${ntb.clientWidth}`,
+        )
+        check('溢出时标记为可滑动', narrow.el.classList.contains('ke-tb-scrollable'), '')
+        check('静止时提示右侧仍有工具', narrow.el.classList.contains('ke-tb-can-r'), '')
+        check('静止时不误报左侧', !narrow.el.classList.contains('ke-tb-can-l'), '')
+        check('渐隐遮罩已挂载', !!narrow.el.querySelector('.ke-tb-fades'), '')
+        check(
+          '首次引导气泡出现且文案明确',
+          /滑动/.test(narrow.el.querySelector('.ke-tb-hint')?.textContent || ''),
+          narrow.el.querySelector('.ke-tb-hint')?.textContent || '无气泡',
+        )
+        check(
+          '工具栏高度变量已写入（遮罩对齐用）',
+          /^\d+px$/.test(narrow.el.style.getPropertyValue('--ke-tb-h').trim()),
+          narrow.el.style.getPropertyValue('--ke-tb-h'),
+        )
+
+        ntb.scrollLeft = ntb.scrollWidth
+        await sleep(80)
+        check(
+          '滑到最右后改为提示左侧',
+          narrow.el.classList.contains('ke-tb-can-l') && !narrow.el.classList.contains('ke-tb-can-r'),
+          `canL=${narrow.el.classList.contains('ke-tb-can-l')} canR=${narrow.el.classList.contains('ke-tb-can-r')}`,
+        )
+        const pillOut = narrow.el.querySelector('.ke-tb-hint')
+        check('滑动后引导气泡立即进入消失动画', !pillOut || pillOut.classList.contains('ke-is-out'), pillOut?.className || '已移除')
+        await sleep(320)
+        check('淡出动画结束后移除气泡节点', !narrow.el.querySelector('.ke-tb-hint'), '')
+        check(
+          '引导已记忆（不重复打扰）',
+          (() => {
+            try { return localStorage.getItem('keditor.toolbarScrollHint') === '1' } catch { return true }
+          })(),
+          '',
+        )
+
+        // 鼠标拖拽平移
+        ntb.scrollLeft = 0
+        await sleep(40)
+        const dragBefore = ntb.scrollLeft
+        ntb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse', clientX: 300, clientY: 10 }))
+        ntb.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', clientX: 230, clientY: 10 }))
+        ntb.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse', clientX: 230, clientY: 10 }))
+        await sleep(60)
+        check('鼠标拖拽可平移工具栏', ntb.scrollLeft > dragBefore, `before=${dragBefore} after=${ntb.scrollLeft}`)
+
+        const fadesRef = narrow.el.querySelector('.ke-tb-fades')
+        narrow.destroy()
+        check(
+          '销毁后清理遮罩与状态类',
+          !fadesRef.isConnected && !narrow.el.classList.contains('ke-tb-scrollable'),
+          '',
+        )
+        narrowWrap.remove()
 
         check('无 JS 运行时错误', jsErrors.length === 0, jsErrors.join(' | ').slice(0, 160))
 

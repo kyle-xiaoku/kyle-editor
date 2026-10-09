@@ -13,7 +13,7 @@ const CHROME_CANDIDATES = [
 export async function withPage({ port = 9333, profile = '/tmp/keditor-chrome-profile', url }, run) {
   const chrome = CHROME_CANDIDATES.find(existsSync)
   if (!chrome) throw new Error('未找到 Chrome/Chromium')
-  const proc = spawn(chrome, ['--headless=new', `--remote-debugging-port=${port}`, '--disable-gpu', '--no-sandbox', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
+  const proc = spawn(chrome, ['--headless=new', `--remote-debugging-port=${port}`, '--disable-gpu', '--no-sandbox', '--disk-cache-size=1', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
   const cleanup = () => {
     try {
       proc.kill('SIGKILL')
@@ -24,6 +24,9 @@ export async function withPage({ port = 9333, profile = '/tmp/keditor-chrome-pro
     const client = await connect(page.webSocketDebuggerUrl)
     await client.send('Runtime.enable')
     await client.send('Page.enable')
+    // 持久化 profile 会缓存测试页与 dist 产物，导致「测的是旧代码」的假绿，必须禁用
+    await client.send('Network.enable')
+    await client.send('Network.setCacheDisabled', { cacheDisabled: true })
     if (url) await client.send('Page.navigate', { url })
     const result = await run(client)
     client.ws.close()

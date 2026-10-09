@@ -5,6 +5,10 @@ import { colorPanel, headingPanel, fontSizePanel, tablePanel, linkPanel, mediaPa
 
 const CARET = '<svg class="ke-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
 
+/** 首次引导：告知工具栏可左右滑动（localStorage 记忆，不重复打扰） */
+const SCROLL_HINT_KEY = 'keditor.toolbarScrollHint'
+const SCROLL_HINT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7 4 12l4 5"/><path d="M16 7l4 5-4 5"/><path d="M4 12h16"/></svg>'
+
 /** 段落样式：label 是名称，desc 说明用途与字号，sample 用真实样式预览 */
 export const HEADINGS = [
   { value: 'p', label: '正文', desc: '默认段落 · 17px，正文内容都用它', sample: '正文示例文字', sampleClass: 's-body' },
@@ -61,6 +65,7 @@ export class Toolbar {
     this.recent = { foreColor: [], backColor: [] }
     this.el = editor.tbEl
     this.build(items)
+    this.setupScrollHints()
   }
 
   build(items) {
@@ -315,8 +320,140 @@ export class Toolbar {
     }
   }
 
+  /* ---------------- 可滑动提示 ---------------- */
+
+  /**
+   * 工具栏溢出时给出四重可发现性提示：
+   * 常显滚动条（CSS）、右侧被遮工具的动态阴影、左侧渐隐、鼠标拖拽，
+   * 外加首次加载的引导气泡。
+   */
+  setupScrollHints() {
+    const tb = this.el
+    const host = this.editor.el
+    if (!tb.isConnected) return // hideToolbar：未挂载则无需提示
+
+    // 渐隐层挂在 .ke 上（不随工具栏内容滚动）
+    this.scrollFades = h('div.ke-tb-fades', { 'aria-hidden': 'true' }, [h('i.ke-tb-fade ke-tb-fade-l')])
+    tb.insertAdjacentElement('afterend', this.scrollFades)
+
+    this.syncScrollHints = () => {
+      if (!tb.isConnected || !host.isConnected) return
+      const max = tb.scrollWidth - tb.clientWidth
+      const overflow = max > 1
+      const left = tb.scrollLeft
+      host.classList.toggle('ke-tb-scrollable', overflow)
+      host.classList.toggle('ke-tb-can-l', overflow && left > 1)
+      host.classList.toggle('ke-tb-can-r', overflow && left < max - 1)
+      host.style.setProperty('--ke-tb-h', `${tb.offsetHeight}px`)
+      if (overflow && !this.hintSettled) this.showScrollHint()
+    }
+
+    this.onTbScroll = () => {
+      this.syncScrollHints()
+      this.hideScrollHint()
+    }
+    tb.addEventListener('scroll', this.onTbScroll, { passive: true })
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.tbRO = new ResizeObserver(() => this.syncScrollHints())
+      this.tbRO.observe(tb)
+    }
+
+    this.onTbPointerDown = (event) => {
+      this.hideScrollHint()
+      this.startDragScroll(event)
+    }
+    tb.addEventListener('pointerdown', this.onTbPointerDown)
+
+    requestAnimationFrame(this.syncScrollHints)
+  }
+
+  /** 鼠标按住拖动平移工具栏（触屏已有原生滑动，不介入） */
+  startDragScroll(event) {
+    const tb = this.el
+    const host = this.editor.el
+    if (event.button !== 0 || event.pointerType !== 'mouse') return
+    if (tb.scrollWidth <= tb.clientWidth + 1) return
+    if (event.target.closest('input, textarea, select')) return
+
+    const startX = event.clientX
+    const startLeft = tb.scrollLeft
+    let dragging = false
+
+    const move = (ev) => {
+      const dx = ev.clientX - startX
+      if (!dragging) {
+        if (Math.abs(dx) < 5) return // 小于阈值视为点击，不抢走按钮交互
+        dragging = true
+        try { tb.setPointerCapture(event.pointerId) } catch { /* 忽略 */ }
+        host.classList.add('ke-tb-dragging')
+        this.editor.popover?.close() // 面板定位会随滚动错位，拖拽时先关闭
+      }
+      ev.preventDefault()
+      tb.scrollLeft = startLeft - dx
+    }
+
+    const up = () => {
+      tb.removeEventListener('pointermove', move)
+      tb.removeEventListener('pointerup', up)
+      tb.removeEventListener('pointercancel', up)
+      host.classList.remove('ke-tb-dragging')
+      if (!dragging) return
+      try { tb.releasePointerCapture(event.pointerId) } catch { /* 已释放 */ }
+      // 吞掉拖拽结束时落下的那一次 click，避免误触发按钮
+      const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); release() }
+      const release = () => {
+        clearTimeout(fallback)
+        tb.removeEventListener('click', stop, true)
+      }
+      const fallback = setTimeout(release, 400)
+      tb.addEventListener('click', stop, true)
+    }
+
+    tb.addEventListener('pointermove', move)
+    tb.addEventListener('pointerup', up)
+    tb.addEventListener('pointercancel', up)
+  }
+
+  showScrollHint() {
+    this.hintSettled = true // 每个实例只尝试一次，避免 resize 反复弹
+    let seen = false
+    try { seen = localStorage.getItem(SCROLL_HINT_KEY) === '1' } catch { /* 隐私模式忽略 */ }
+    if (seen) return
+    this.hintEl = h('div.ke-tb-hint', { 'aria-hidden': 'true' }, [
+      h('span.ke-tb-hint-ico', { html: SCROLL_HINT_ICON }),
+      h('span', { text: '工具栏可左右滑动' }),
+    ])
+    this.editor.el.appendChild(this.hintEl)
+    this.hintTimer = setTimeout(() => this.hideScrollHint(), 3800)
+  }
+
+  hideScrollHint() {
+    if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
+    const pill = this.hintEl
+    if (!pill) return
+    this.hintEl = null
+    try { localStorage.setItem(SCROLL_HINT_KEY, '1') } catch { /* 忽略 */ }
+    pill.classList.add('ke-is-out')
+    setTimeout(() => pill.remove(), 260)
+  }
+
   destroy() {
-    this.el.innerHTML = ''
+    const tb = this.el
+    if (this.tbRO) { this.tbRO.disconnect(); this.tbRO = null }
+    if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
+    if (this.onTbScroll) tb.removeEventListener('scroll', this.onTbScroll)
+    if (this.onTbPointerDown) tb.removeEventListener('pointerdown', this.onTbPointerDown)
+    this.scrollFades?.remove()
+    this.hintEl?.remove()
+    this.scrollFades = null
+    this.hintEl = null
+    const host = this.editor?.el
+    if (host) {
+      host.classList.remove('ke-tb-scrollable', 'ke-tb-can-l', 'ke-tb-can-r', 'ke-tb-dragging')
+      host.style.removeProperty('--ke-tb-h')
+    }
+    tb.innerHTML = ''
     this.buttons.clear()
   }
 }

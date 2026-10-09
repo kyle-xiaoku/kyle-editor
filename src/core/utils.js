@@ -65,3 +65,31 @@ export function on(root, selector, type, handler) {
 }
 
 export const isFunction = (val) => typeof val === 'function'
+
+/**
+ * 媒体（图片）对齐：正文里的 img 是 display:block，居中等对齐靠 margin:auto 实现。
+ * 工具栏命令与气泡工具条共用同一套逻辑，保证两条入口行为一致。
+ */
+export function getMediaAlign(img) {
+  if (!img) return 'left'
+  const ml = img.style.marginLeft
+  const mr = img.style.marginRight
+  if (ml === 'auto' && mr === 'auto') return 'center'
+  if (ml === 'auto') return 'right'
+  return 'left'
+}
+
+export function setMediaAlign(img, align) {
+  if (!img) return
+  img.style.maxWidth = '100%'
+  if (align === 'center') {
+    img.style.marginLeft = 'auto'
+    img.style.marginRight = 'auto'
+  } else if (align === 'right') {
+    img.style.marginLeft = 'auto'
+    img.style.marginRight = '0'
+  } else {
+    img.style.marginLeft = '0'
+    img.style.marginRight = 'auto'
+  }
+}

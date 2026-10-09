@@ -108,10 +108,11 @@ function useKEditor(options = {}) {
   });
   return { host, editor: instance };
 }
+KEditorVue.install = (app, options) => KEditorPlugin.install(app, options);
 export {
   KEditor2 as KEditor,
   KEditorPlugin,
   KEditorVue,
-  KEditorPlugin as default,
+  KEditorVue as default,
   useKEditor
 };

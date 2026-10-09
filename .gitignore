@@ -5,3 +5,8 @@ uploads/
 *.tgz
 .idea
 .talkmed-agentpilot
+
+# 凭证文件：绝不可提交
+.npmrc
+!.npmrc.example
+.npmrc.*

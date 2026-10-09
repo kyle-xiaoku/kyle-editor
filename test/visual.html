@@ -28,6 +28,10 @@
       const params = new URLSearchParams(location.search)
       const state = params.get('state') || 'rich'
       document.getElementById('state-tag').textContent = 'state=' + state
+      // 滚动引导气泡只弹一次，截图前清掉记忆以便每次都能拍到
+      if (state.startsWith('scroll')) {
+        try { localStorage.removeItem('keditor.toolbarScrollHint') } catch (e) { /* 忽略 */ }
+      }
 
       const RICH = `
         <h2>微信公众号排版风格</h2>
@@ -107,6 +111,34 @@
           pic.style.borderRadius = '10px'
           editor.scrollEl.scrollTop = 0
           node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        } else if (state === 'resize') {
+          document.getElementById('desc').textContent = '图片拖拽缩放：拖动右下角圆形把手，实时显示宽度百分比'
+          editor.setContent('<p>拖动图片右下角的圆形把手即可等比缩放：</p>')
+          const img = await canvasFile('rs.png', 700, 300, '#4a5568', '可缩放图片')
+          await editor.upload(img, 'image')
+          const node = editor.root.querySelector('[data-k-media="image"]')
+          node.querySelector('img').style.width = '80%'
+          editor.scrollEl.scrollTop = 0
+          node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const hb = editor.bubble.resizeEl.getBoundingClientRect()
+          const cx = hb.left + hb.width / 2
+          const cy = hb.top + hb.height / 2
+          editor.bubble.resizeEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: cx, clientY: cy, button: 0, bubbles: true }))
+          editor.bubble.resizeEl.dispatchEvent(new PointerEvent('pointermove', { clientX: cx - 130, clientY: cy, bubbles: true }))
+        } else if (state === 'align') {
+          document.getElementById('desc').textContent = '图片缩小后居中：点工具栏「居中」对图片生效（此前只有气泡能居中）'
+          editor.setContent('<p>图片缩小到 50% 后，点工具栏「居中」按钮即可让图片在正文中居中（按钮同时高亮）：</p>')
+          const img = await canvasFile('al.png', 640, 260, '#07c160', '缩小后居中')
+          await editor.upload(img, 'image')
+          const node = editor.root.querySelector('[data-k-media="image"]')
+          const pic = node.querySelector('img')
+          pic.style.width = '50%'
+          pic.style.maxWidth = '100%'
+          node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 80))
+          editor.commands.setAlign('center')
+          editor.scrollEl.scrollTop = 0
         } else if (state === 'source') {
           document.getElementById('desc').textContent = 'HTML 源码模式（格式化 + 可编辑）'
           editor.enterSource()
@@ -140,6 +172,18 @@
           document.getElementById('desc').textContent = '预览模式（电脑屏宽 677px）'
           editor.openPreview()
           editor.previewPanel.setDevice('pc')
+        } else if (state === 'scroll' || state === 'scroll2') {
+          document.getElementById('desc').textContent =
+            state === 'scroll'
+              ? '工具栏溢出（静止）：常显滚动条 + 右侧阴影提示还有工具 + 首次引导气泡'
+              : '工具栏溢出（滑到最右）：左侧渐隐提示还有内容，右侧阴影自动消失'
+          editor.scrollEl.scrollTop = 0
+          await new Promise((r) => setTimeout(r, 200))
+          if (state === 'scroll2') {
+            editor.tbEl.scrollLeft = editor.tbEl.scrollWidth
+            editor.toolbar.hideScrollHint()
+            await new Promise((r) => setTimeout(r, 400))
+          }
         }
         window.__ready = true
       }

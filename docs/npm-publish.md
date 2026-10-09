@@ -122,9 +122,13 @@ npm view kyle-editor version
 | `npm run build` | 产出 `dist/` 6 个文件 |
 | `npm run verify` | build + 66 项冒烟测试 + 4 个 demo 页健康检查 + 类型校验 |
 | `npm run test:package` | 校验包名/exports 路径/`.cjs` 后缀/裸说明符一致性（63 项） |
+| `npm run test:install` | **打 tarball → 隔离目录全新安装 → headless Chrome 跑 40 项消费者用例**（UMD/ESM/Vue 三条集成路径） |
 | `npm run pack:check` | build + 一致性校验，并打印**将要发布的文件清单与体积**（不发布） |
-| `npm run release` | 自动先跑 `prerelease`(=verify) 再 `npm publish --access public` |
+| `npm run release` | 自动先跑 `prerelease`(=verify + test:install) 再 `npm publish` |
 | `npm run release:beta` | 发到 `beta` 标签，不影响 `latest` |
+
+> `publishConfig` 已写死 `registry: https://registry.npmjs.org`。即使本地 `npm config get registry` 指向
+> npmmirror 等**只读镜像**，`npm run release` 也会发到官方源，不会误报 403。
 
 ---
 
@@ -138,21 +142,41 @@ npm run pack:check
 
 关注输出末尾：`total files`、`package size`、`unpacked size`，以及**是否混入了不该发的文件**（`.DS_Store`、`test/`、`demo/`、`.idea/`）。
 
-### 3.2 真实打 tarball 并在干净目录安装
+### 3.2 真实打 tarball 并在干净目录安装（已自动化）
 
-这是最接近用户实际体验的验证，能提前发现 `exports` 路径写错、`files` 漏配等问题：
+这是最接近用户实际体验的验证，**一条命令跑完**：
+
+```bash
+npm run build && npm run test:install
+```
+
+它会自动完成：`npm pack` → 在 `.pack-verify/install` 建**带独立 `package.json`** 的隔离目录 →
+`npm install <tarball> vue@3`（走官方源）→ 起临时静态服务 → headless Chrome 打开
+`test/fixtures/consumer.html` 跑 **40 项断言**，覆盖：
+
+- **UMD `<script>` 路径**：全局 `KEditor`、工具栏渲染、CSS 随 JS 注入、`setContent/getHTML/getText/getJSON/counts`
+- **安全**：`sanitize` 剔除 `onclick` / `onerror`
+- **源码与预览**：`enterSource` / `exitSource` / `toggleSource` / `openPreview` / `closePreview`
+- **网络链接插入**：`insertImage(url)` / `insertVideo(url)`，并校验 `counts` 的媒体计数
+- **ESM 路径**：动态 `import()` 安装后的 `dist/keditor.es.js`，默认+具名导出完整，`destroy` 清理
+- **Vue 3 路径**：`app.use(default)` 注册全局 `<k-editor>`、默认导出直接当组件、`v-model` 双向绑定（含外部赋值回写）、`ref` 暴露 `editor/getHTML/setContent`、`unmount` 卸载
+
+任一断言失败则退出码非 0，`npm run release` 会被 `prerelease` 拦下。
+加 `--keep` 可保留安装目录人工复查：`node test/check-install.mjs --keep`。
+
+<details>
+<summary>手动版（不跑浏览器，只验四个入口能解析）</summary>
 
 ```bash
 npm run build
 npm pack                       # 生成 kyle-editor-1.0.0.tgz
 
-mkdir -p .pack-verify && cd .pack-verify
+mkdir -p .pack-verify/manual && cd .pack-verify/manual
 cat > package.json <<'JSON'
 { "name": "pack-verify", "private": true, "version": "1.0.0" }
 JSON
-npm install ../kyle-editor-1.0.0.tgz
+npm install ../../kyle-editor-1.0.0.tgz
 
-# 四个入口都必须能解析并拿到导出
 node -e "const m=require('kyle-editor');console.log('CJS 核心:',Object.keys(m).length,'个导出, create=',typeof m.create)"
 node -e "const m=require('kyle-editor/vue');console.log('CJS Vue :',Object.keys(m).join(','))"
 node --input-type=module -e "const m=await import('kyle-editor');console.log('ESM 核心:',Object.keys(m).length,'个导出, default=',typeof m.default)"
@@ -168,14 +192,9 @@ ESM 核心: 22 个导出, default= function
 ESM Vue : KEditor,KEditorPlugin,KEditorVue,default,useKEditor
 ```
 
-> ⚠️ 临时验证目录**必须有自己的 `package.json`**。否则 npm 会向上找到项目根的 `package.json`，把 tarball 装进本项目自己（并往 `dependencies` 里写入 `"kyle-editor": "file:...tgz"` 的自依赖）。万一发生了：删掉 `package.json` 里的 `dependencies` 字段、`rm -rf node_modules/kyle-editor`，再跑 `npm install --package-lock-only` 重建 lock。
+</details>
 
-浏览器端再验一次（可选，确认样式注入与挂载正常）：
-
-```bash
-cd .pack-verify
-npx vite --port 5199   # 在页面里 import { KEditor } from 'kyle-editor' 试挂载
-```
+> ⚠️ 临时验证目录**必须有自己的 `package.json`**。否则 npm 会向上找到项目根的 `package.json`，把 tarball 装进本项目自己（并往 `dependencies` 里写入 `"kyle-editor": "file:...tgz"` 的自依赖）。万一发生了：删掉 `package.json` 里的 `dependencies` 字段、`rm -rf node_modules/kyle-editor`，再跑 `npm install --package-lock-only` 重建 lock。`test/check-install.mjs` 已自动处理这一点。
 
 ---
 
@@ -327,6 +346,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run verify
+      - run: npm run test:install    # 打 tarball 真实安装 + headless Chrome 跑 40 项消费者用例
       - run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -351,6 +371,7 @@ jobs:
 | CDN 拿不到最新文件 | unpkg/jsdelivr 有缓存 → `https://unpkg.com/kyle-editor@1.0.1/dist/keditor.umd.js` 锁定版本 |
 | `require('kyle-editor')` 得到空对象 `{}` | `type: module` 的包里 CJS 产物用了 `.js` 后缀，Node 按最近 package.json 当成 ESM 解析 → CJS 产物必须是 `.cjs`（本项目已修，`npm run test:package` 会校验） |
 | 服务端渲染报 `document is not defined` | 编辑器只能在浏览器运行 → Next.js 用 `'use client'` + `dynamic(..., { ssr: false })`，Nuxt 用 `.client` 插件 + `<ClientOnly>`，详见 `docs/integration.md` §3.5 |
+| Vue 里用了组件但渲染出**空白且无任何报错** | 把默认导出当成普通对象传给 `h()` 时会渲染成 `<!---->`。本包的默认导出是**自带 `install` 的组件**，`app.use(KEditorVue)` 与 `<KEditorVue />` 两种写法都可用；若仍异常，改用显式具名导出 `import { KEditorVue } from 'kyle-editor/vue'`。`npm run test:install` 会回归这两种写法 |
 | 发到公司源失败 | 检查 `.npmrc` registry 与该源的登录态（`npm whoami --registry=…`） |
 
 ---
@@ -364,8 +385,12 @@ cd /Users/kyle/Desktop/work/kyle/keditor
 
 npm login                          # 1) 登录（会拉起浏览器授权；开了 2FA 则发布时补 --otp）
 npm view kyle-editor version       # 2) 应返回 404，确认名字仍可用
-npm run release                    # 3) 构建 + 66 项冒烟 + 4 页健康检查 + 类型/包配置校验 + 发布
+npm run release                    # 3) 构建 + 66 项冒烟 + 4 页健康检查 + 类型/包配置校验
+                                   #    + 40 项真实安装浏览器验证，全部通过后才 publish
 ```
+
+> `npm login` 必须由**你本人**完成（浏览器授权 / 2FA），无法代执行。
+> 若本地默认源是 npmmirror 等镜像也无需改动：`publishConfig.registry` 已写死官方源。
 
 发布后确认：
 
@@ -382,6 +407,6 @@ open https://www.npmjs.com/package/kyle-editor
 |------|------|------|
 | 构建 + 全量验证 | `npm run verify` | 66/66 冒烟、4 页健康、类型通过、63 项包配置通过 |
 | 核对发布内容 | `npm run pack:check` | 38 个文件，约 200 KB，无 test/demo/.DS_Store |
-| 真实安装验证 | 见 §3.2 | CJS/ESM × 核心/Vue 四个入口均 22 / 5 个导出 |
+| **真实安装 + 浏览器验证** | `npm run test:install` | 40/40 通过（UMD/ESM/Vue 三条集成路径） |
 | 正式发布 | `npm run release` | 返回包页面 URL |
 | 先发 beta 试水 | `npm run release:beta` | `dist-tags` 出现 beta，latest 不变 |

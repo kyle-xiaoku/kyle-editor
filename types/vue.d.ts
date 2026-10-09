@@ -60,5 +60,14 @@ export declare function useKEditor(options?: KEditorOptions): {
 
 export type KEditorVueInstance = ComponentPublicInstance & KEditorVueExposed
 export { KEditorVue as KEditorComponent }
-export { KEditorPlugin as default }
+
+/**
+ * 默认导出 = 组件本身，并自带 `install`：
+ * - `app.use(KEditorVue)` → 全局注册 `<k-editor>`
+ * - `<KEditorVue />` / `import KEditorVue from 'kyle-editor/vue'` 直接当组件用
+ */
+declare const KEditorVueWithInstall: typeof KEditorVue & {
+  install(app: App, opts?: { name?: string }): void
+}
+export default KEditorVueWithInstall
 export type { KEditor, KEditorOptions, EditorCounts, EditorEventMap }

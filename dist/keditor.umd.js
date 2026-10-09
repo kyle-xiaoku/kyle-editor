@@ -34,19 +34,81 @@
 .ke-tb {
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
-  padding: 6px 10px;
+  padding: 6px 10px 5px;
   background: #fff;
   border-bottom: 1px solid var(--ke-line);
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* 滚动条常显：静止时也能一眼看出「还有更多工具」 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 24, 40, .28) rgba(16, 24, 40, .05);
 }
-.ke-tb::-webkit-scrollbar { display: none; }
+.ke-tb::-webkit-scrollbar { height: 7px; }
+.ke-tb::-webkit-scrollbar-track { background: rgba(16, 24, 40, .06); border-radius: 4px; }
+.ke-tb::-webkit-scrollbar-thumb { background: rgba(16, 24, 40, .34); border-radius: 4px; }
+.ke-tb:hover::-webkit-scrollbar-thumb { background: rgba(16, 24, 40, .48); }
+.ke-tb::-webkit-scrollbar-thumb:active { background: var(--ke-primary); }
 .ke-tb-group { display: flex; align-items: center; gap: 2px; flex: none; }
 .ke-tb-sep { width: 1px; height: 18px; background: var(--ke-line); margin: 0 6px; flex: none; }
-.ke-tb-tail { position: sticky; right: 0; margin-left: auto; display: flex; align-items: center; gap: 4px; flex: none; padding: 0 2px 0 10px; background: #fff; box-shadow: -10px 0 12px -10px rgba(16, 24, 40, .25); }
+.ke-tb-tail {
+  position: sticky; right: 0; margin-left: auto; display: flex; align-items: center; gap: 4px;
+  flex: none; padding: 0 2px 0 12px; background: #fff;
+  box-shadow: none; transition: box-shadow .2s;
+}
+/* 仅当右侧仍有被尾部遮住的工具时才显示，让阴影成为「可继续滑动」的信号 */
+.ke.ke-tb-can-r .ke-tb-tail { box-shadow: -16px 0 14px -10px rgba(16, 24, 40, .55); }
+/* 尾部左缘渐隐：明确表达「还有工具滑到这块底下」 */
+.ke-tb-tail::before {
+  content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 30px;
+  background: linear-gradient(to left, rgba(255, 255, 255, .99) 18%, rgba(255, 255, 255, 0));
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+.ke.ke-tb-can-r .ke-tb-tail::before { opacity: 1; }
 /* 遮住工具栏右侧 padding 区域，避免滚动内容从尾部后面露出 */
 .ke-tb-tail::after { content: ''; position: absolute; top: 0; bottom: 0; right: -16px; width: 18px; background: #fff; }
+
+/* ------- 可滑动提示：左侧渐隐 + 拖拽手势 + 首次引导气泡 ------- */
+/* 高度避开底部 7px 滚动条，否则会把滚动条左端涂白 */
+.ke-tb-fades { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--ke-tb-h, 44px) - 8px); z-index: 6; pointer-events: none; overflow: hidden; }
+.ke-tb-fade { position: absolute; top: 0; bottom: 0; width: 34px; opacity: 0; transition: opacity .2s; }
+.ke-tb-fade-l { left: 0; background: linear-gradient(to right, rgba(255, 255, 255, .99) 26%, rgba(255, 255, 255, 0)); }
+.ke.ke-tb-can-l .ke-tb-fade-l { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .ke.ke-tb-scrollable .ke-tb { cursor: grab; }
+  .ke.ke-tb-dragging .ke-tb, .ke.ke-tb-dragging .ke-tb .ke-btn { cursor: grabbing; }
+}
+.ke.ke-tb-dragging { user-select: none; -webkit-user-select: none; }
+.ke-tb-hint {
+  position: absolute; left: 50%; top: calc(var(--ke-tb-h, 44px) + 9px); z-index: 7;
+  transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px;
+  background: rgba(31, 35, 41, .94); color: #fff;
+  font-size: 12.5px; line-height: 1; white-space: nowrap; letter-spacing: .2px;
+  box-shadow: 0 6px 20px rgba(16, 24, 40, .26);
+  pointer-events: none;
+  animation: ke-hint-in .3s cubic-bezier(.22, 1, .36, 1) both;
+}
+.ke-tb-hint::before {
+  content: ''; position: absolute; top: -5px; left: 50%; margin-left: -5px;
+  border: 5px solid transparent; border-top: 0; border-bottom-color: rgba(31, 35, 41, .94);
+}
+.ke-tb-hint-ico { display: flex; color: #7ee2a8; animation: ke-hint-slide 1.15s ease-in-out infinite; }
+.ke-tb-hint-ico svg { width: 15px; height: 15px; display: block; }
+.ke-tb-hint.ke-is-out { animation: ke-hint-out .24s ease-in both; }
+@keyframes ke-hint-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(.96); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes ke-hint-out {
+  to { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(.96); }
+}
+@keyframes ke-hint-slide {
+  0%, 100% { transform: translateX(-2.5px); }
+  50% { transform: translateX(2.5px); }
+}
 .ke-btn {
   position: relative; flex: none;
   height: 30px; min-width: 30px; padding: 0 6px;
@@ -300,6 +362,24 @@
 .ke-bubble button.ke-is-active { background: var(--ke-primary); color: #fff; }
 .ke-bubble .ke-sep { width: 1px; height: 16px; background: rgba(255,255,255,.18); margin: 0 3px; }
 
+/* ---------------- 图片缩放把手（鼠标拖动调大小） ---------------- */
+.ke-img-resize {
+  position: absolute; z-index: 31; width: 18px; height: 18px; border-radius: 5px;
+  background: #fff; border: 2px solid var(--ke-primary); color: var(--ke-primary);
+  cursor: nwse-resize; box-shadow: 0 1px 5px rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; transition: transform .12s ease, background .12s ease, color .12s ease;
+}
+.ke-img-resize svg { width: 10px; height: 10px; display: block; }
+.ke-img-resize:hover { transform: scale(1.12); background: var(--ke-primary); color: #fff; }
+.ke-img-resize[hidden] { display: none; }
+.ke-img-resize-tip {
+  position: absolute; z-index: 32; transform: translate(-50%, -100%);
+  background: rgba(28,32,38,.9); color: #fff; font-size: 12px; line-height: 1;
+  padding: 5px 8px; border-radius: 6px; pointer-events: none; white-space: nowrap;
+}
+.ke-img-resize-tip[hidden] { display: none; }
+
 /* ---------------- Drop zone / Toast / Lightbox ---------------- */
 .ke-dropzone {
   position: absolute; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
@@ -379,7 +459,7 @@
     };
     return wrapped;
   }
-  const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+  const clamp$1 = (num, min, max) => Math.min(Math.max(num, min), max);
   function formatSize(bytes) {
     if (!bytes && bytes !== 0) return "-";
     const units = ["B", "KB", "MB", "GB"];
@@ -415,6 +495,28 @@
       node.appendChild(typeof child === "string" || typeof child === "number" ? document.createTextNode(String(child)) : child);
     }
     return node;
+  }
+  function getMediaAlign(img) {
+    if (!img) return "left";
+    const ml = img.style.marginLeft;
+    const mr = img.style.marginRight;
+    if (ml === "auto" && mr === "auto") return "center";
+    if (ml === "auto") return "right";
+    return "left";
+  }
+  function setMediaAlign(img, align) {
+    if (!img) return;
+    img.style.maxWidth = "100%";
+    if (align === "center") {
+      img.style.marginLeft = "auto";
+      img.style.marginRight = "auto";
+    } else if (align === "right") {
+      img.style.marginLeft = "auto";
+      img.style.marginRight = "0";
+    } else {
+      img.style.marginLeft = "0";
+      img.style.marginRight = "auto";
+    }
   }
   const S = (d) => `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
   const icons = {
@@ -1144,6 +1246,16 @@
         if (file && this.node) this.editor.media.replaceNode(this.node, file);
       });
       editor.el.appendChild(this.replaceInput);
+      this.resizeEl = h("div.ke-img-resize", {
+        hidden: true,
+        "aria-label": "拖动缩放图片",
+        title: "拖动缩放图片",
+        html: '<svg viewBox="0 0 10 10"><path d="M7 1 L9 3 M4 4 L6 6 M1 7 L3 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+      });
+      this.resizeTip = h("div.ke-img-resize-tip", { hidden: true });
+      this.resizeEl.addEventListener("pointerdown", (event) => this.onResizePointerDown(event));
+      editor.el.appendChild(this.resizeEl);
+      editor.el.appendChild(this.resizeTip);
     }
     show(node) {
       this.node = node;
@@ -1154,14 +1266,28 @@
         if (item) this.el.appendChild(item);
       }
       this.el.hidden = false;
+      if (kind === "image") this.attachResize();
       this.position();
     }
     hide() {
       this.el.hidden = true;
+      this.detachResize();
       this.node = null;
     }
+    attachResize() {
+      var _a;
+      if (!((_a = this.node) == null ? void 0 : _a.querySelector("img"))) return;
+      this.resizeEl.hidden = false;
+      this.positionHandle();
+    }
+    detachResize() {
+      this.resizeEl.hidden = true;
+      this.resizeTip.hidden = true;
+    }
     position() {
-      if (!this.node || this.el.hidden) return;
+      if (!this.node) return;
+      this.positionHandle();
+      if (this.el.hidden) return;
       const rootBox = this.editor.el.getBoundingClientRect();
       const box = this.node.getBoundingClientRect();
       const view = this.editor.scrollEl.getBoundingClientRect();
@@ -1177,18 +1303,92 @@
       this.el.style.left = `${Math.min(Math.max(left, halfWidth + 8), Math.max(halfWidth + 8, rootBox.width - halfWidth - 8))}px`;
       this.el.style.top = `${Math.max(6, top)}px`;
     }
+    positionHandle() {
+      const node = this.node;
+      if (!node || this.resizeEl.hidden) return;
+      const img = node.querySelector("img");
+      if (!img) return;
+      const rootBox = this.editor.el.getBoundingClientRect();
+      const box = img.getBoundingClientRect();
+      if (!box.width && !box.height) return;
+      const size = 18;
+      const gap = 6;
+      this.resizeEl.style.left = `${box.right - rootBox.left - size - gap}px`;
+      this.resizeEl.style.top = `${box.bottom - rootBox.top - size - gap}px`;
+    }
+    updateResizeTip(pct) {
+      var _a;
+      if (this.resizeTip.hidden || !this.node) return;
+      this.resizeTip.textContent = `${Math.round(pct)}%`;
+      const rootBox = this.editor.el.getBoundingClientRect();
+      const box = ((_a = this.node.querySelector("img")) == null ? void 0 : _a.getBoundingClientRect()) || this.node.getBoundingClientRect();
+      this.resizeTip.style.left = `${box.left - rootBox.left + box.width / 2}px`;
+      this.resizeTip.style.top = `${box.top - rootBox.top - 10}px`;
+    }
+    onResizePointerDown(event) {
+      var _a;
+      if (event.button != null && event.button !== 0) return;
+      const img = (_a = this.node) == null ? void 0 : _a.querySelector("img");
+      if (!img) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const figure = this.node;
+      const figureWidth = figure.getBoundingClientRect().width;
+      const startPct = clamp(currentWidthPercent(img, figureWidth), 15, 100);
+      const startX = event.clientX;
+      this.el.hidden = true;
+      this.resizeTip.hidden = false;
+      this.updateResizeTip(startPct);
+      try {
+        this.resizeEl.setPointerCapture(event.pointerId);
+      } catch {
+      }
+      const move = (e) => {
+        const dx = e.clientX - startX;
+        const deltaPct = figureWidth ? dx / figureWidth * 100 : 0;
+        const pct = clamp(Math.round(startPct + deltaPct), 15, 100);
+        img.style.width = `${pct}%`;
+        img.style.maxWidth = "100%";
+        this.updateResizeTip(pct);
+        this.positionHandle();
+      };
+      const up = () => {
+        this.resizeEl.removeEventListener("pointermove", move);
+        this.resizeEl.removeEventListener("pointerup", up);
+        this.resizeEl.removeEventListener("pointercancel", up);
+        this.resizeTip.hidden = true;
+        this.editor.commitHistory();
+        this.editor.refreshStatus();
+        this.el.hidden = false;
+        this.position();
+      };
+      this.resizeEl.addEventListener("pointermove", move);
+      this.resizeEl.addEventListener("pointerup", up);
+      this.resizeEl.addEventListener("pointercancel", up);
+    }
     imageActions(node) {
       const img = node.querySelector("img");
-      const align = currentAlign$1(img);
+      const align = getMediaAlign(img);
       const radius = img && parseFloat(getComputedStyle(img).borderRadius) > 0;
+      const applyAlign = (a) => {
+        setMediaAlign(img, a);
+        this.editor.commitHistory();
+        this.position();
+      };
+      const applySize = (w) => {
+        img.style.width = w;
+        setMediaAlign(img, getMediaAlign(img));
+        this.editor.commitHistory();
+        this.position();
+      };
       return [
-        btn("alignLeft", "左对齐", () => setAlign(img, "left"), align === "left"),
-        btn("alignCenter", "居中", () => setAlign(img, "center"), align === "center"),
-        btn("alignRight", "右对齐", () => setAlign(img, "right"), align === "right"),
+        btn("alignLeft", "左对齐", () => applyAlign("left"), align === "left"),
+        btn("alignCenter", "居中", () => applyAlign("center"), align === "center"),
+        btn("alignRight", "右对齐", () => applyAlign("right"), align === "right"),
         sep(),
-        textBtn("30%", "宽度 30%", () => setSize(img, "30%")),
-        textBtn("60%", "宽度 60%", () => setSize(img, "60%")),
-        textBtn("100%", "宽度 100%", () => setSize(img, "100%")),
+        textBtn("30%", "宽度 30%", () => applySize("30%")),
+        textBtn("60%", "宽度 60%", () => applySize("60%")),
+        textBtn("100%", "宽度 100%", () => applySize("100%")),
         sep(),
         btn("rounded", "圆角", () => toggleRadius(img, node), radius),
         btn("preview", "查看大图", () => previewImage(img)),
@@ -1235,6 +1435,8 @@
     destroy() {
       this.el.remove();
       this.replaceInput.remove();
+      this.resizeEl.remove();
+      this.resizeTip.remove();
     }
   }
   function btn(iconName, title, onclick, active = false) {
@@ -1249,39 +1451,6 @@
     return node;
   }
   const sep = () => h("span.ke-sep");
-  function currentAlign$1(img) {
-    if (!img) return "left";
-    const ml = img.style.marginLeft;
-    const mr = img.style.marginRight;
-    if (ml === "auto" && mr === "auto") return "center";
-    if (ml === "auto") return "right";
-    return "left";
-  }
-  function setAlign(img, align) {
-    var _a;
-    if (!img) return;
-    const width = img.style.width || "100%";
-    img.style.width = width;
-    img.style.maxWidth = "100%";
-    if (align === "center") {
-      img.style.marginLeft = "auto";
-      img.style.marginRight = "auto";
-    } else if (align === "right") {
-      img.style.marginLeft = "auto";
-      img.style.marginRight = "0";
-    } else {
-      img.style.marginLeft = "0";
-      img.style.marginRight = "auto";
-    }
-    (_a = img.parentElement) == null ? void 0 : _a.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-  function setSize(img, width) {
-    if (!img) return;
-    img.style.width = width;
-    img.style.maxWidth = "100%";
-    setAlign(img, currentAlign$1(img));
-    img.dispatchEvent(new Event("change", { bubbles: true }));
-  }
   function toggleRadius(img, node) {
     if (!img) return;
     const has = parseFloat(getComputedStyle(img).borderRadius) > 0;
@@ -1291,7 +1460,19 @@
   function previewImage(img) {
     if (img) lightbox(img.src);
   }
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+  function currentWidthPercent(img, figureWidth) {
+    var _a, _b;
+    if (!figureWidth) return 100;
+    const match = (_b = (_a = img == null ? void 0 : img.style) == null ? void 0 : _a.width) == null ? void 0 : _b.match(/^([\d.]+)%$/);
+    if (match) return parseFloat(match[1]);
+    return img.getBoundingClientRect().width / figureWidth * 100;
+  }
   const CARET = '<svg class="ke-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  const SCROLL_HINT_KEY = "keditor.toolbarScrollHint";
+  const SCROLL_HINT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7 4 12l4 5"/><path d="M16 7l4 5-4 5"/><path d="M4 12h16"/></svg>';
   const HEADINGS = [
     { value: "p", label: "正文", desc: "默认段落 · 17px，正文内容都用它", sample: "正文示例文字", sampleClass: "s-body" },
     { value: "h1", label: "标题一", desc: "大标题 · 22px 加粗，全文主标题（建议只用一次）", sample: "标题一示例", sampleClass: "s-h1" },
@@ -1370,6 +1551,7 @@
       this.recent = { foreColor: [], backColor: [] };
       this.el = editor.tbEl;
       this.build(items);
+      this.setupScrollHints();
     }
     build(items) {
       const group = h("div.ke-tb-group");
@@ -1611,8 +1793,150 @@
         btn2 == null ? void 0 : btn2.classList.add("ke-is-active");
       }
     }
+    /* ---------------- 可滑动提示 ---------------- */
+    /**
+     * 工具栏溢出时给出四重可发现性提示：
+     * 常显滚动条（CSS）、右侧被遮工具的动态阴影、左侧渐隐、鼠标拖拽，
+     * 外加首次加载的引导气泡。
+     */
+    setupScrollHints() {
+      const tb = this.el;
+      const host = this.editor.el;
+      if (!tb.isConnected) return;
+      this.scrollFades = h("div.ke-tb-fades", { "aria-hidden": "true" }, [h("i.ke-tb-fade ke-tb-fade-l")]);
+      tb.insertAdjacentElement("afterend", this.scrollFades);
+      this.syncScrollHints = () => {
+        if (!tb.isConnected || !host.isConnected) return;
+        const max = tb.scrollWidth - tb.clientWidth;
+        const overflow = max > 1;
+        const left = tb.scrollLeft;
+        host.classList.toggle("ke-tb-scrollable", overflow);
+        host.classList.toggle("ke-tb-can-l", overflow && left > 1);
+        host.classList.toggle("ke-tb-can-r", overflow && left < max - 1);
+        host.style.setProperty("--ke-tb-h", `${tb.offsetHeight}px`);
+        if (overflow && !this.hintSettled) this.showScrollHint();
+      };
+      this.onTbScroll = () => {
+        this.syncScrollHints();
+        this.hideScrollHint();
+      };
+      tb.addEventListener("scroll", this.onTbScroll, { passive: true });
+      if (typeof ResizeObserver !== "undefined") {
+        this.tbRO = new ResizeObserver(() => this.syncScrollHints());
+        this.tbRO.observe(tb);
+      }
+      this.onTbPointerDown = (event) => {
+        this.hideScrollHint();
+        this.startDragScroll(event);
+      };
+      tb.addEventListener("pointerdown", this.onTbPointerDown);
+      requestAnimationFrame(this.syncScrollHints);
+    }
+    /** 鼠标按住拖动平移工具栏（触屏已有原生滑动，不介入） */
+    startDragScroll(event) {
+      const tb = this.el;
+      const host = this.editor.el;
+      if (event.button !== 0 || event.pointerType !== "mouse") return;
+      if (tb.scrollWidth <= tb.clientWidth + 1) return;
+      if (event.target.closest("input, textarea, select")) return;
+      const startX = event.clientX;
+      const startLeft = tb.scrollLeft;
+      let dragging = false;
+      const move = (ev) => {
+        var _a;
+        const dx = ev.clientX - startX;
+        if (!dragging) {
+          if (Math.abs(dx) < 5) return;
+          dragging = true;
+          try {
+            tb.setPointerCapture(event.pointerId);
+          } catch {
+          }
+          host.classList.add("ke-tb-dragging");
+          (_a = this.editor.popover) == null ? void 0 : _a.close();
+        }
+        ev.preventDefault();
+        tb.scrollLeft = startLeft - dx;
+      };
+      const up = () => {
+        tb.removeEventListener("pointermove", move);
+        tb.removeEventListener("pointerup", up);
+        tb.removeEventListener("pointercancel", up);
+        host.classList.remove("ke-tb-dragging");
+        if (!dragging) return;
+        try {
+          tb.releasePointerCapture(event.pointerId);
+        } catch {
+        }
+        const stop = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          release();
+        };
+        const release = () => {
+          clearTimeout(fallback);
+          tb.removeEventListener("click", stop, true);
+        };
+        const fallback = setTimeout(release, 400);
+        tb.addEventListener("click", stop, true);
+      };
+      tb.addEventListener("pointermove", move);
+      tb.addEventListener("pointerup", up);
+      tb.addEventListener("pointercancel", up);
+    }
+    showScrollHint() {
+      this.hintSettled = true;
+      let seen = false;
+      try {
+        seen = localStorage.getItem(SCROLL_HINT_KEY) === "1";
+      } catch {
+      }
+      if (seen) return;
+      this.hintEl = h("div.ke-tb-hint", { "aria-hidden": "true" }, [
+        h("span.ke-tb-hint-ico", { html: SCROLL_HINT_ICON }),
+        h("span", { text: "工具栏可左右滑动" })
+      ]);
+      this.editor.el.appendChild(this.hintEl);
+      this.hintTimer = setTimeout(() => this.hideScrollHint(), 3800);
+    }
+    hideScrollHint() {
+      if (this.hintTimer) {
+        clearTimeout(this.hintTimer);
+        this.hintTimer = null;
+      }
+      const pill = this.hintEl;
+      if (!pill) return;
+      this.hintEl = null;
+      try {
+        localStorage.setItem(SCROLL_HINT_KEY, "1");
+      } catch {
+      }
+      pill.classList.add("ke-is-out");
+      setTimeout(() => pill.remove(), 260);
+    }
     destroy() {
-      this.el.innerHTML = "";
+      var _a, _b, _c;
+      const tb = this.el;
+      if (this.tbRO) {
+        this.tbRO.disconnect();
+        this.tbRO = null;
+      }
+      if (this.hintTimer) {
+        clearTimeout(this.hintTimer);
+        this.hintTimer = null;
+      }
+      if (this.onTbScroll) tb.removeEventListener("scroll", this.onTbScroll);
+      if (this.onTbPointerDown) tb.removeEventListener("pointerdown", this.onTbPointerDown);
+      (_a = this.scrollFades) == null ? void 0 : _a.remove();
+      (_b = this.hintEl) == null ? void 0 : _b.remove();
+      this.scrollFades = null;
+      this.hintEl = null;
+      const host = (_c = this.editor) == null ? void 0 : _c.el;
+      if (host) {
+        host.classList.remove("ke-tb-scrollable", "ke-tb-can-l", "ke-tb-can-r", "ke-tb-dragging");
+        host.style.removeProperty("--ke-tb-h");
+      }
+      tb.innerHTML = "";
       this.buttons.clear();
     }
   }
@@ -1998,6 +2322,17 @@
       this.editor.afterEdit();
     }
     setAlign(align) {
+      var _a, _b;
+      const media = (_a = this.editor.bubble) == null ? void 0 : _a.node;
+      if (media && ((_b = media.dataset) == null ? void 0 : _b.kMedia) === "image" && align !== "justify") {
+        const img = media.querySelector("img");
+        if (img) {
+          setMediaAlign(img, align);
+          this.editor.commitHistory();
+          this.editor.bubble.position();
+          return;
+        }
+      }
       const map = { left: "justifyLeft", center: "justifyCenter", right: "justifyRight", justify: "justifyFull" };
       const cmd = map[align];
       if (!cmd) return;
@@ -3274,6 +3609,7 @@
       this.clearMediaSelection();
       node.classList.add("ke-is-selected-media");
       this.bubble.show(node);
+      this.refreshStatus();
     }
     clearMediaSelection() {
       this.root.querySelectorAll(".ke-is-selected-media").forEach((n) => n.classList.remove("ke-is-selected-media"));
@@ -3285,10 +3621,13 @@
     }
     /* ------------------------------ 状态 ------------------------------ */
     getState() {
-      var _a;
+      var _a, _b, _c;
       const range = getRange(this.root);
       const block = closestBlock((range == null ? void 0 : range.commonAncestorContainer) || this.root, this.root);
       const anchor = range ? findAnchor(range, this.root) : null;
+      const media = (_a = this.bubble) == null ? void 0 : _a.node;
+      const mediaImg = media && ((_b = media.dataset) == null ? void 0 : _b.kMedia) === "image" ? media.querySelector("img") : null;
+      const align = mediaImg ? getMediaAlign(mediaImg) : currentAlign(range, block);
       return {
         bold: this.queryState("bold"),
         italic: this.queryState("italic"),
@@ -3296,8 +3635,8 @@
         strikeThrough: this.queryState("strikeThrough"),
         ul: this.queryState("insertUnorderedList"),
         ol: this.queryState("insertOrderedList"),
-        align: currentAlign(range, block),
-        block: ((_a = block == null ? void 0 : block.tagName) == null ? void 0 : _a.toLowerCase()) || "p",
+        align,
+        block: ((_c = block == null ? void 0 : block.tagName) == null ? void 0 : _c.toLowerCase()) || "p",
         fontSize: this.commands.currentFontSize(),
         linkUrl: anchor ? anchor.getAttribute("href") : "",
         linkTarget: anchor ? anchor.getAttribute("target") === "_blank" : false,
@@ -3357,24 +3696,6 @@
       }
     }
     /* ------------------------------ 内容 API ------------------------------ */
-    /** 手动上传一个文件（自动判定图片/视频），等价于工具栏选择文件 */
-    upload(file, kind = this.media.kindOf(file)) {
-      if (!kind) throw new Error("[KEditor] 不支持的文件类型");
-      return this.media.upload(file, kind);
-    }
-    /** 按地址插入图片 */
-    insertImage(url, alt = "") {
-      return this.media.insertImageUrl(url, alt);
-    }
-    /** 按地址插入视频 */
-    insertVideo(url, label = "视频") {
-      return this.media.insertVideoUrl(url, label);
-    }
-    /** 取消全部进行中的上传任务 */
-    cancelUploads() {
-      this.media.cancelAll();
-      return this;
-    }
     getHTML({ clean = true } = {}) {
       const html = this.root.innerHTML;
       if (!clean) return html;
@@ -3669,7 +3990,7 @@
     if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar;
     if (options.toolbar === false) out.toolbar = [];
     if (options.toolbar === true) out.toolbar = DEFAULT_TOOLBAR;
-    out.height = clamp(out.height ?? 460, 0, 4e3);
+    out.height = clamp$1(out.height ?? 460, 0, 4e3);
     return out;
   }
   function buildStatusbar(editor) {

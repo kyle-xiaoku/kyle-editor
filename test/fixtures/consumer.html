@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>消费者安装验证</title>
+<style>body{font-family:-apple-system,sans-serif;margin:24px}#log{font-size:12px;color:#666;white-space:pre-wrap}</style>
+</head>
+<body>
+<h3>从 npm 安装后的产物验证</h3>
+<div id="umd-box"></div>
+<div id="esm-box"></div>
+<div id="vue-box"></div>
+<div id="log"></div>
+
+<!-- 路径 1：UMD <script> 引入 -->
+<script src="node_modules/kyle-editor/dist/keditor.umd.js"></script>
+<script src="node_modules/vue/dist/vue.global.prod.js"></script>
+<script src="node_modules/kyle-editor/dist/keditor-vue.umd.js"></script>
+
+<script type="module">
+const results = []
+const ok = (name, cond, extra) => results.push({ name, pass: !!cond, extra: extra === undefined ? null : String(extra) })
+const log = (s) => { document.getElementById('log').textContent += s + '\n' }
+window.__RESULT = { done: false, results }
+
+/* ---------------- 1. UMD 全局 ---------------- */
+ok('UMD 全局 KEditor 存在', typeof window.KEditor === 'object' && typeof window.KEditor.create === 'function')
+ok('UMD version 可读', !!window.KEditor.version, window.KEditor && window.KEditor.version)
+
+/* ---------------- 2. 真实创建 + 文档承诺的 API ---------------- */
+let editor = null
+try {
+  editor = window.KEditor.create('#umd-box', { value: '', uploader: 'mock' })
+  ok('KEditor.create 返回实例', !!editor && typeof editor.getHTML === 'function')
+} catch (e) {
+  ok('KEditor.create 返回实例', false, e.message)
+}
+
+if (editor) {
+  ok('工具栏已渲染', document.querySelectorAll('#umd-box .ke-tb button').length > 10,
+     document.querySelectorAll('#umd-box .ke-tb button').length)
+  ok('CSS 随 JS 注入', Array.from(document.querySelectorAll('style')).some((s) => s.textContent.includes('ke-tb')))
+
+  // setContent / getHTML / getText / getJSON
+  editor.setContent('<h1>标题一</h1><p>正文<strong>加粗</strong>内容</p>')
+  const html = editor.getHTML()
+  ok('setContent/getHTML 往返', html.includes('<h1>') && html.includes('<strong>'), html.slice(0, 90))
+  ok('getText 提取纯文本', editor.getText().includes('正文'), editor.getText().slice(0, 40))
+  ok('getJSON 返回 {html,text,counts}', (() => { const j = editor.getJSON(); return j && typeof j.html === 'string' && typeof j.text === 'string' && !!j.counts })())
+  ok('counts() 字数统计', editor.counts().chars > 0, JSON.stringify(editor.counts()))
+
+  // XSS 净化
+  editor.setContent('<p onclick="alert(1)">安全测试</p><img src="x.png" onerror="alert(2)">')
+  const clean = editor.getHTML()
+  ok('sanitize 移除 onclick/onerror', !/on(click|error)\s*=/i.test(clean), clean.slice(0, 140))
+
+  // 源码模式（enterSource / exitSource / toggleSource）
+  editor.setContent('<p>源码测试</p>')
+  editor.enterSource()
+  ok('enterSource 进入源码模式', editor.sourceMode === true && !!document.querySelector('.ke-source, textarea'))
+  editor.exitSource()
+  ok('exitSource 退出源码模式', editor.sourceMode === false)
+  editor.toggleSource(); const t1 = editor.sourceMode
+  editor.toggleSource(); const t2 = editor.sourceMode
+  ok('toggleSource 可来回切换', t1 === true && t2 === false, `${t1}->${t2}`)
+
+  // 预览 / 全屏
+  editor.openPreview()
+  ok('openPreview 打开预览', editor.previewMode === true && !!document.querySelector('.ke-preview'))
+  editor.closePreview()
+  const pv = document.querySelector('.ke-preview')
+  ok('closePreview 关闭预览', editor.previewMode === false && (!pv || pv.hidden === true),
+     `previewMode=${editor.previewMode} hidden=${pv ? pv.hidden : 'no-el'}`)
+
+  // 网络链接插入媒体（本轮新增能力）
+  editor.setContent('<p></p>')
+  editor.focus()
+  editor.insertImage('https://example.com/a.png', '示例图')
+  ok('insertImage(url) 链接插图', editor.getHTML().includes('example.com/a.png'), editor.getHTML().slice(0, 160))
+  editor.insertVideo('https://example.com/v.mp4', '示例视频')
+  ok('insertVideo(url) 链接插视频', editor.getHTML().includes('example.com/v.mp4'), editor.getHTML().slice(0, 160))
+
+  // 媒体计数
+  ok('counts 统计图片/视频', editor.counts().images >= 1 && editor.counts().videos >= 1, JSON.stringify(editor.counts()))
+
+  // exportHtml：清理编辑器内部属性后返回 HTML 片段
+  try {
+    const exported = window.KEditor.exportHtml('<p data-k-id="x" contenteditable="true">hi</p>')
+    ok('exportHtml 清理内部属性', typeof exported === 'string' && exported.includes('hi') &&
+       !exported.includes('data-k-id') && !exported.includes('contenteditable'), exported)
+  } catch (e) { ok('exportHtml 清理内部属性', false, e.message) }
+
+  // 事件
+  let changeFired = false
+  const off = editor.on('change', () => { changeFired = true })
+  editor.setContent('<p>触发变更</p>')
+  await new Promise((r) => setTimeout(r, 400))
+  ok('on(change) 事件触发', changeFired)
+  off && off()
+
+  // 上传工具类导出
+  ok('ChunkUploader 导出', typeof window.KEditor.ChunkUploader === 'function')
+  ok('mockAdapter/httpAdapter/simpleAdapter 导出',
+     typeof window.KEditor.mockAdapter === 'function' &&
+     typeof window.KEditor.httpAdapter === 'function' &&
+     typeof window.KEditor.simpleAdapter === 'function')
+  ok('sanitizeHtml/formatHtml 导出',
+     typeof window.KEditor.sanitizeHtml === 'function' && typeof window.KEditor.formatHtml === 'function')
+
+  ok('destroy 可用', typeof editor.destroy === 'function')
+}
+
+/* ---------------- 3. ESM 动态导入（安装后的 es 产物） ---------------- */
+try {
+  const ns = await import('./node_modules/kyle-editor/dist/keditor.es.js')
+  ok('ESM 默认导出可用', typeof ns.default === 'function')
+  ok('ESM 具名导出完整', typeof ns.create === 'function' && typeof ns.sanitizeHtml === 'function', Object.keys(ns).length)
+  const esmEditor = ns.create('#esm-box', { uploader: 'mock' })
+  esmEditor.setContent('<p>ESM 路径正常</p>')
+  ok('ESM create 可挂载', esmEditor.getText().includes('ESM'), esmEditor.getText().slice(0, 40))
+  esmEditor.destroy()
+  ok('ESM destroy 清理实例', !document.querySelector('#esm-box .ke-tb'))
+} catch (e) {
+  ok('ESM 动态导入', false, e.message)
+}
+
+/* ---------------- 4. Vue 3 UMD 组件 ---------------- */
+try {
+  const V = window.Vue
+  const KV = window.KEditorVue
+  ok('Vue UMD 全局存在', !!V && !!KV, KV ? Object.keys(KV).join(',') : 'undefined')
+  const comp = KV.KEditorVue
+  ok('具名导出 KEditorVue 为组件', !!(comp && comp.setup && comp.props && comp.props.modelValue),
+     comp ? `setup=${typeof comp.setup} props=${Object.keys(comp.props || {}).join('|')}` : 'undefined')
+  ok('默认导出可直接当组件用（自带 install）',
+     !!(KV.default && KV.default.setup && typeof KV.default.install === 'function'),
+     KV.default ? `setup=${typeof KV.default.setup} install=${typeof KV.default.install}` : 'undefined')
+  ok('KEditorPlugin 具名导出', !!(KV.KEditorPlugin && typeof KV.KEditorPlugin.install === 'function'))
+
+  const { createApp, ref, h, nextTick, resolveComponent } = V
+
+  // 用法 A：app.use(default) + 全局 <k-editor> 标签（README 推荐的写法）
+  const globalApp = createApp({
+    setup() {
+      const model = ref('<p>全局注册内容</p>')
+      window.__GLOBAL_MODEL = model
+      return () => h(resolveComponent('k-editor'), {
+        modelValue: model.value,
+        'onUpdate:modelValue': (v) => { model.value = v },
+      })
+    },
+  })
+  globalApp.use(KV.default)
+  globalApp.mount('#vue-box')
+  await new Promise((r) => setTimeout(r, 1000))
+  const gContent = document.querySelector('#vue-box .ke-content')
+  ok('app.use(default) 注册 <k-editor> 并渲染', !!gContent && gContent.textContent.includes('全局注册内容'),
+     gContent ? gContent.textContent.slice(0, 40) : 'no .ke-content')
+  globalApp.unmount()
+
+  // 用法 B：把默认导出直接当组件（之前会静默渲染空白的陷阱）
+  let inst = null
+  const localApp = createApp({
+    setup() {
+      const model = ref('<p>Vue 初始内容</p>')
+      const edRef = ref(null)
+      inst = { model, edRef }
+      return () => h('div', [h(KV.default, {
+        ref: edRef,
+        modelValue: model.value,
+        'onUpdate:modelValue': (v) => { model.value = v },
+        options: { uploader: 'mock' },
+      })])
+    },
+  })
+  localApp.config.errorHandler = (err, _vm, info) => results.push({ name: 'Vue 无未捕获错误', pass: false, extra: `${info}: ${err && err.message}` })
+  localApp.mount('#vue-box')
+  await new Promise((r) => setTimeout(r, 1200))
+
+  const vueContent = document.querySelector('#vue-box .ke-content')
+  ok('默认导出当组件可挂载编辑器', !!vueContent)
+  ok('v-model 初值渲染', !!vueContent && vueContent.textContent.includes('Vue 初始内容'),
+     vueContent ? vueContent.textContent.slice(0, 40) : 'no content')
+  const ex = inst && inst.edRef.value
+  ok('ref 暴露 editor 实例', !!(ex && ex.editor && typeof ex.editor.getHTML === 'function'),
+     ex ? Object.keys(ex).slice(0, 8).join(',') : 'null ref')
+  ok('ref 暴露 getHTML/setContent', !!(ex && typeof ex.getHTML === 'function' && typeof ex.setContent === 'function'))
+  if (ex && ex.setContent) {
+    ex.setContent('<p>Vue 写入内容</p>')
+    await nextTick()
+    ok('ref.setContent 生效', ex.getHTML().includes('Vue 写入内容'), ex.getHTML().slice(0, 60))
+    // 外部改 v-model 应同步到编辑器
+    inst.model.value = '<p>外部双向绑定</p>'
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 300))
+    ok('v-model 外部赋值同步到编辑器', ex.getHTML().includes('外部双向绑定'), ex.getHTML().slice(0, 60))
+  }
+  localApp.unmount()
+  ok('unmount 后卸载编辑器', !document.querySelector('#vue-box .ke-tb'))
+} catch (e) {
+  ok('Vue UMD 组件挂载', false, e.message)
+}
+
+/* ---------------- 汇总 ---------------- */
+window.__RESULT.done = true
+window.__RESULT.total = results.length
+window.__RESULT.passed = results.filter((r) => r.pass).length
+log(`${window.__RESULT.passed}/${window.__RESULT.total} 通过`)
+results.filter((r) => !r.pass).forEach((r) => log('FAIL ' + r.name + ' :: ' + r.extra))
+</script>
+</body>
+</html>

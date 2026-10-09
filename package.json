@@ -40,13 +40,14 @@
     "test:pages": "node test/check-page.mjs",
     "test:types": "node test/check-types.mjs",
     "test:package": "node test/check-package.mjs",
-    "test:visual": "node test/shoot.mjs rich,uploading,bubble,source,preview,color,heading,media,link",
+    "test:install": "node test/check-install.mjs",
+    "test:visual": "node test/shoot.mjs rich,uploading,bubble,resize,align,source,preview,color,heading,media,link,scroll,scroll2",
     "clean": "rm -rf dist",
     "verify": "npm run build && npm test && npm run test:pages && npm run test:types && npm run test:package",
     "pack:check": "npm run build && npm run test:package && npm pack --dry-run",
-    "prerelease": "npm run verify",
-    "release": "npm publish --access public",
-    "release:beta": "npm publish --access public --tag beta"
+    "prerelease": "npm run verify && npm run test:install",
+    "release": "npm publish --access public --registry=https://registry.npmjs.org",
+    "release:beta": "npm publish --access public --tag beta --registry=https://registry.npmjs.org"
   },
   "keywords": [
     "richtext",
@@ -60,7 +61,8 @@
   "license": "MIT",
   "author": "kyle <zhendong.li@edoctor.cn>",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "peerDependencies": {
     "vue": "^3.0.0"

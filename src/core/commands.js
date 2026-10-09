@@ -1,7 +1,7 @@
 /** 编辑指令集：以最小可用为原则，优先使用浏览器原生命令，自定义指令保持输出干净的微信风格 HTML */
 import { getRange, insertNode, closestBlock } from './selection.js'
 import { sanitizeHtml } from './sanitize.js'
-import { h, uid } from './utils.js'
+import { h, uid, setMediaAlign } from './utils.js'
 
 const MARKS = { bold: 'bold', italic: 'italic', underline: 'underline', strikeThrough: 'strike', through: 'strikethrough' }
 
@@ -92,6 +92,18 @@ export class Commands {
   }
 
   setAlign(align) {
+    // 选中图片时，对齐作用于图片本身（img 是 display:block，靠 margin:auto 居中）。
+    // 浏览器原生命令与给 figure 设 text-align 都对 block 图片无效。
+    const media = this.editor.bubble?.node
+    if (media && media.dataset?.kMedia === 'image' && align !== 'justify') {
+      const img = media.querySelector('img')
+      if (img) {
+        setMediaAlign(img, align)
+        this.editor.commitHistory()
+        this.editor.bubble.position()
+        return
+      }
+    }
     const map = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight', justify: 'justifyFull' }
     const cmd = map[align]
     if (!cmd) return

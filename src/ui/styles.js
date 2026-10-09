@@ -32,19 +32,81 @@ export const CSS = `
 .ke-tb {
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
-  padding: 6px 10px;
+  padding: 6px 10px 5px;
   background: #fff;
   border-bottom: 1px solid var(--ke-line);
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* 滚动条常显：静止时也能一眼看出「还有更多工具」 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 24, 40, .28) rgba(16, 24, 40, .05);
 }
-.ke-tb::-webkit-scrollbar { display: none; }
+.ke-tb::-webkit-scrollbar { height: 7px; }
+.ke-tb::-webkit-scrollbar-track { background: rgba(16, 24, 40, .06); border-radius: 4px; }
+.ke-tb::-webkit-scrollbar-thumb { background: rgba(16, 24, 40, .34); border-radius: 4px; }
+.ke-tb:hover::-webkit-scrollbar-thumb { background: rgba(16, 24, 40, .48); }
+.ke-tb::-webkit-scrollbar-thumb:active { background: var(--ke-primary); }
 .ke-tb-group { display: flex; align-items: center; gap: 2px; flex: none; }
 .ke-tb-sep { width: 1px; height: 18px; background: var(--ke-line); margin: 0 6px; flex: none; }
-.ke-tb-tail { position: sticky; right: 0; margin-left: auto; display: flex; align-items: center; gap: 4px; flex: none; padding: 0 2px 0 10px; background: #fff; box-shadow: -10px 0 12px -10px rgba(16, 24, 40, .25); }
+.ke-tb-tail {
+  position: sticky; right: 0; margin-left: auto; display: flex; align-items: center; gap: 4px;
+  flex: none; padding: 0 2px 0 12px; background: #fff;
+  box-shadow: none; transition: box-shadow .2s;
+}
+/* 仅当右侧仍有被尾部遮住的工具时才显示，让阴影成为「可继续滑动」的信号 */
+.ke.ke-tb-can-r .ke-tb-tail { box-shadow: -16px 0 14px -10px rgba(16, 24, 40, .55); }
+/* 尾部左缘渐隐：明确表达「还有工具滑到这块底下」 */
+.ke-tb-tail::before {
+  content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 30px;
+  background: linear-gradient(to left, rgba(255, 255, 255, .99) 18%, rgba(255, 255, 255, 0));
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+.ke.ke-tb-can-r .ke-tb-tail::before { opacity: 1; }
 /* 遮住工具栏右侧 padding 区域，避免滚动内容从尾部后面露出 */
 .ke-tb-tail::after { content: ''; position: absolute; top: 0; bottom: 0; right: -16px; width: 18px; background: #fff; }
+
+/* ------- 可滑动提示：左侧渐隐 + 拖拽手势 + 首次引导气泡 ------- */
+/* 高度避开底部 7px 滚动条，否则会把滚动条左端涂白 */
+.ke-tb-fades { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--ke-tb-h, 44px) - 8px); z-index: 6; pointer-events: none; overflow: hidden; }
+.ke-tb-fade { position: absolute; top: 0; bottom: 0; width: 34px; opacity: 0; transition: opacity .2s; }
+.ke-tb-fade-l { left: 0; background: linear-gradient(to right, rgba(255, 255, 255, .99) 26%, rgba(255, 255, 255, 0)); }
+.ke.ke-tb-can-l .ke-tb-fade-l { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .ke.ke-tb-scrollable .ke-tb { cursor: grab; }
+  .ke.ke-tb-dragging .ke-tb, .ke.ke-tb-dragging .ke-tb .ke-btn { cursor: grabbing; }
+}
+.ke.ke-tb-dragging { user-select: none; -webkit-user-select: none; }
+.ke-tb-hint {
+  position: absolute; left: 50%; top: calc(var(--ke-tb-h, 44px) + 9px); z-index: 7;
+  transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px;
+  background: rgba(31, 35, 41, .94); color: #fff;
+  font-size: 12.5px; line-height: 1; white-space: nowrap; letter-spacing: .2px;
+  box-shadow: 0 6px 20px rgba(16, 24, 40, .26);
+  pointer-events: none;
+  animation: ke-hint-in .3s cubic-bezier(.22, 1, .36, 1) both;
+}
+.ke-tb-hint::before {
+  content: ''; position: absolute; top: -5px; left: 50%; margin-left: -5px;
+  border: 5px solid transparent; border-top: 0; border-bottom-color: rgba(31, 35, 41, .94);
+}
+.ke-tb-hint-ico { display: flex; color: #7ee2a8; animation: ke-hint-slide 1.15s ease-in-out infinite; }
+.ke-tb-hint-ico svg { width: 15px; height: 15px; display: block; }
+.ke-tb-hint.ke-is-out { animation: ke-hint-out .24s ease-in both; }
+@keyframes ke-hint-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(.96); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes ke-hint-out {
+  to { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(.96); }
+}
+@keyframes ke-hint-slide {
+  0%, 100% { transform: translateX(-2.5px); }
+  50% { transform: translateX(2.5px); }
+}
 .ke-btn {
   position: relative; flex: none;
   height: 30px; min-width: 30px; padding: 0 6px;
@@ -297,6 +359,24 @@ export const CSS = `
 .ke-bubble button:hover { background: rgba(255,255,255,.14); }
 .ke-bubble button.ke-is-active { background: var(--ke-primary); color: #fff; }
 .ke-bubble .ke-sep { width: 1px; height: 16px; background: rgba(255,255,255,.18); margin: 0 3px; }
+
+/* ---------------- 图片缩放把手（鼠标拖动调大小） ---------------- */
+.ke-img-resize {
+  position: absolute; z-index: 31; width: 18px; height: 18px; border-radius: 5px;
+  background: #fff; border: 2px solid var(--ke-primary); color: var(--ke-primary);
+  cursor: nwse-resize; box-shadow: 0 1px 5px rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; transition: transform .12s ease, background .12s ease, color .12s ease;
+}
+.ke-img-resize svg { width: 10px; height: 10px; display: block; }
+.ke-img-resize:hover { transform: scale(1.12); background: var(--ke-primary); color: #fff; }
+.ke-img-resize[hidden] { display: none; }
+.ke-img-resize-tip {
+  position: absolute; z-index: 32; transform: translate(-50%, -100%);
+  background: rgba(28,32,38,.9); color: #fff; font-size: 12px; line-height: 1;
+  padding: 5px 8px; border-radius: 6px; pointer-events: none; white-space: nowrap;
+}
+.ke-img-resize-tip[hidden] { display: none; }
 
 /* ---------------- Drop zone / Toast / Lightbox ---------------- */
 .ke-dropzone {

@@ -96,5 +96,9 @@ export function useKEditor(options = {}) {
   return { host, editor: instance }
 }
 
-export default KEditorPlugin
+// 组件自带 install：`app.use(KEditorVue)` 与 `<KEditorVue />` 两种写法都可用，
+// 避免把默认导出当组件却渲染出空白（无任何报错）的陷阱
+KEditorVue.install = (app, options) => KEditorPlugin.install(app, options)
+
+export default KEditorVue
 export { KEditor }

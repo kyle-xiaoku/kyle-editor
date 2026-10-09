@@ -109,11 +109,12 @@ function useKEditor(options = {}) {
   });
   return { host, editor: instance };
 }
+KEditorVue.install = (app, options) => KEditorPlugin.install(app, options);
 Object.defineProperty(exports, "KEditor", {
   enumerable: true,
   get: () => kyleEditor.KEditor
 });
 exports.KEditorPlugin = KEditorPlugin;
 exports.KEditorVue = KEditorVue;
-exports.default = KEditorPlugin;
+exports.default = KEditorVue;
 exports.useKEditor = useKEditor;

@@ -109,13 +109,14 @@
     });
     return { host, editor: instance };
   }
+  KEditorVue.install = (app, options) => KEditorPlugin.install(app, options);
   Object.defineProperty(exports2, "KEditor", {
     enumerable: true,
     get: () => kyleEditor.KEditor
   });
   exports2.KEditorPlugin = KEditorPlugin;
   exports2.KEditorVue = KEditorVue;
-  exports2.default = KEditorPlugin;
+  exports2.default = KEditorVue;
   exports2.useKEditor = useKEditor;
   Object.defineProperties(exports2, { __esModule: { value: true }, [Symbol.toStringTag]: { value: "Module" } });
 });

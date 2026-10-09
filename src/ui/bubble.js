@@ -1,5 +1,5 @@
 /** 媒体气泡工具条：选中图片/视频后浮出的快捷操作 */
-import { h } from '../core/utils.js'
+import { h, getMediaAlign, setMediaAlign } from '../core/utils.js'
 import { icon } from '../core/icons.js'
 import { lightbox } from './toast.js'
 
@@ -18,6 +18,18 @@ export class MediaBubble {
       if (file && this.node) this.editor.media.replaceNode(this.node, file)
     })
     editor.el.appendChild(this.replaceInput)
+
+    // 图片缩放把手（挂在编辑器根容器，不进入内容区，避免污染快照/导出）
+    this.resizeEl = h('div.ke-img-resize', {
+      hidden: true,
+      'aria-label': '拖动缩放图片',
+      title: '拖动缩放图片',
+      html: '<svg viewBox="0 0 10 10"><path d="M7 1 L9 3 M4 4 L6 6 M1 7 L3 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    })
+    this.resizeTip = h('div.ke-img-resize-tip', { hidden: true })
+    this.resizeEl.addEventListener('pointerdown', (event) => this.onResizePointerDown(event))
+    editor.el.appendChild(this.resizeEl)
+    editor.el.appendChild(this.resizeTip)
   }
 
   show(node) {
@@ -29,16 +41,31 @@ export class MediaBubble {
       if (item) this.el.appendChild(item)
     }
     this.el.hidden = false
+    if (kind === 'image') this.attachResize()
     this.position()
   }
 
   hide() {
     this.el.hidden = true
+    this.detachResize()
     this.node = null
   }
 
+  attachResize() {
+    if (!this.node?.querySelector('img')) return
+    this.resizeEl.hidden = false
+    this.positionHandle()
+  }
+
+  detachResize() {
+    this.resizeEl.hidden = true
+    this.resizeTip.hidden = true
+  }
+
   position() {
-    if (!this.node || this.el.hidden) return
+    if (!this.node) return
+    this.positionHandle()
+    if (this.el.hidden) return
     const rootBox = this.editor.el.getBoundingClientRect()
     const box = this.node.getBoundingClientRect()
     const view = this.editor.scrollEl.getBoundingClientRect()
@@ -56,18 +83,98 @@ export class MediaBubble {
     this.el.style.top = `${Math.max(6, top)}px`
   }
 
+  positionHandle() {
+    const node = this.node
+    if (!node || this.resizeEl.hidden) return
+    const img = node.querySelector('img')
+    if (!img) return
+    const rootBox = this.editor.el.getBoundingClientRect()
+    const box = img.getBoundingClientRect()
+    if (!box.width && !box.height) return
+    const size = 18
+    const gap = 6
+    this.resizeEl.style.left = `${box.right - rootBox.left - size - gap}px`
+    this.resizeEl.style.top = `${box.bottom - rootBox.top - size - gap}px`
+  }
+
+  updateResizeTip(pct) {
+    if (this.resizeTip.hidden || !this.node) return
+    this.resizeTip.textContent = `${Math.round(pct)}%`
+    const rootBox = this.editor.el.getBoundingClientRect()
+    const box = this.node.querySelector('img')?.getBoundingClientRect() || this.node.getBoundingClientRect()
+    this.resizeTip.style.left = `${box.left - rootBox.left + box.width / 2}px`
+    this.resizeTip.style.top = `${box.top - rootBox.top - 10}px`
+  }
+
+  onResizePointerDown(event) {
+    if (event.button != null && event.button !== 0) return
+    const img = this.node?.querySelector('img')
+    if (!img) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const figure = this.node
+    const figureWidth = figure.getBoundingClientRect().width
+    const startPct = clamp(currentWidthPercent(img, figureWidth), 15, 100)
+    const startX = event.clientX
+
+    // 拖拽期间隐藏气泡，结束后恢复
+    this.el.hidden = true
+    this.resizeTip.hidden = false
+    this.updateResizeTip(startPct)
+    try {
+      this.resizeEl.setPointerCapture(event.pointerId)
+    } catch {
+      /* 模拟派发时可能无活动指针，忽略 */
+    }
+
+    const move = (e) => {
+      const dx = e.clientX - startX
+      const deltaPct = figureWidth ? (dx / figureWidth) * 100 : 0
+      const pct = clamp(Math.round(startPct + deltaPct), 15, 100)
+      img.style.width = `${pct}%`
+      img.style.maxWidth = '100%'
+      this.updateResizeTip(pct)
+      this.positionHandle()
+    }
+    const up = () => {
+      this.resizeEl.removeEventListener('pointermove', move)
+      this.resizeEl.removeEventListener('pointerup', up)
+      this.resizeEl.removeEventListener('pointercancel', up)
+      this.resizeTip.hidden = true
+      this.editor.commitHistory()
+      this.editor.refreshStatus()
+      this.el.hidden = false
+      this.position()
+    }
+    this.resizeEl.addEventListener('pointermove', move)
+    this.resizeEl.addEventListener('pointerup', up)
+    this.resizeEl.addEventListener('pointercancel', up)
+  }
+
   imageActions(node) {
     const img = node.querySelector('img')
-    const align = currentAlign(img)
+    const align = getMediaAlign(img)
     const radius = img && parseFloat(getComputedStyle(img).borderRadius) > 0
+    const applyAlign = (a) => {
+      setMediaAlign(img, a)
+      this.editor.commitHistory()
+      this.position()
+    }
+    const applySize = (w) => {
+      img.style.width = w
+      setMediaAlign(img, getMediaAlign(img))
+      this.editor.commitHistory()
+      this.position()
+    }
     return [
-      btn('alignLeft', '左对齐', () => setAlign(img, 'left'), align === 'left'),
-      btn('alignCenter', '居中', () => setAlign(img, 'center'), align === 'center'),
-      btn('alignRight', '右对齐', () => setAlign(img, 'right'), align === 'right'),
+      btn('alignLeft', '左对齐', () => applyAlign('left'), align === 'left'),
+      btn('alignCenter', '居中', () => applyAlign('center'), align === 'center'),
+      btn('alignRight', '右对齐', () => applyAlign('right'), align === 'right'),
       sep(),
-      textBtn('30%', '宽度 30%', () => setSize(img, '30%')),
-      textBtn('60%', '宽度 60%', () => setSize(img, '60%')),
-      textBtn('100%', '宽度 100%', () => setSize(img, '100%')),
+      textBtn('30%', '宽度 30%', () => applySize('30%')),
+      textBtn('60%', '宽度 60%', () => applySize('60%')),
+      textBtn('100%', '宽度 100%', () => applySize('100%')),
       sep(),
       btn('rounded', '圆角', () => toggleRadius(img, node), radius),
       btn('preview', '查看大图', () => previewImage(img)),
@@ -120,6 +227,8 @@ export class MediaBubble {
   destroy() {
     this.el.remove()
     this.replaceInput.remove()
+    this.resizeEl.remove()
+    this.resizeTip.remove()
   }
 }
 
@@ -138,41 +247,6 @@ function textBtn(label, title, onclick) {
 
 const sep = () => h('span.ke-sep')
 
-function currentAlign(img) {
-  if (!img) return 'left'
-  const ml = img.style.marginLeft
-  const mr = img.style.marginRight
-  if (ml === 'auto' && mr === 'auto') return 'center'
-  if (ml === 'auto') return 'right'
-  return 'left'
-}
-
-function setAlign(img, align) {
-  if (!img) return
-  const width = img.style.width || '100%'
-  img.style.width = width
-  img.style.maxWidth = '100%'
-  if (align === 'center') {
-    img.style.marginLeft = 'auto'
-    img.style.marginRight = 'auto'
-  } else if (align === 'right') {
-    img.style.marginLeft = 'auto'
-    img.style.marginRight = '0'
-  } else {
-    img.style.marginLeft = '0'
-    img.style.marginRight = 'auto'
-  }
-  img.parentElement?.dispatchEvent(new Event('change', { bubbles: true }))
-}
-
-function setSize(img, width) {
-  if (!img) return
-  img.style.width = width
-  img.style.maxWidth = '100%'
-  setAlign(img, currentAlign(img))
-  img.dispatchEvent(new Event('change', { bubbles: true }))
-}
-
 function toggleRadius(img, node) {
   if (!img) return
   const has = parseFloat(getComputedStyle(img).borderRadius) > 0
@@ -182,4 +256,15 @@ function toggleRadius(img, node) {
 
 function previewImage(img) {
   if (img) lightbox(img.src)
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function currentWidthPercent(img, figureWidth) {
+  if (!figureWidth) return 100
+  const match = img?.style?.width?.match(/^([\d.]+)%$/)
+  if (match) return parseFloat(match[1])
+  return (img.getBoundingClientRect().width / figureWidth) * 100
 }

@@ -115,7 +115,7 @@ export function Editor({ value, onChange }) {
 // main.js
 import { createApp } from 'vue'
 import App from './App.vue'
-import KEditorVue from 'kyle-editor/vue'      // 默认导出是 Vue 插件
+import KEditorVue from 'kyle-editor/vue'      // 默认导出是组件（自带 install）
 
 createApp(App).use(KEditorVue).mount('#app')
 ```
@@ -159,6 +159,10 @@ import { KEditorVue } from 'kyle-editor/vue'
   <KEditorVue v-model="html" />
 </template>
 ```
+
+> 默认导出与具名导出 `KEditorVue` 是同一个组件（默认导出额外带了 `install`），
+> 所以 `import KEditorVue from 'kyle-editor/vue'` 后直接 `<KEditorVue v-model="html" />` 也能正常渲染。
+> 若只想全局注册，用 `import { KEditorPlugin } from 'kyle-editor/vue'` 语义更清楚。
 
 ### 3.3 组合式 API
 
@@ -274,7 +278,7 @@ UMD 方式（无构建）下若需提示，可 `/// <reference types="kyle-edito
 KEditor.create('#editor', { toolbar: ['undo', 'redo', '|', 'bold', 'image', 'video', ':tail', 'source'] })
 ```
 
-`'|'` 为分隔符，`':tail'` 之后的按钮靠右对齐（窄屏下吸附在右端不会被滚走），`toolbar: false` 隐藏工具栏。
+`'|'` 为分隔符，`':tail'` 之后的按钮靠右对齐（窄屏下吸附在右端不会被滚走），`toolbar: false` 隐藏工具栏。工具栏放不下时可左右滑动，并有滚动条、边缘渐隐、首次引导气泡等提示，详见 [api.md](api.md#工具栏项)。
 
 可用项：`undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor` `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video` `table` `code` `hr` `clear` `source` `preview` `fullscreen`，详见 [api.md](api.md#工具栏项)。
 
