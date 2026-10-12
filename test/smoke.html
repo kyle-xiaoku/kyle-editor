@@ -509,6 +509,43 @@
         check('beforeUpload 可拦截上传', hookCalled === 1 && !/blocked\.mp4/.test(hooked.getHTML()) && hooked.media.tasks.size === 0, `called=${hookCalled}`)
         hooked.destroy()
 
+        // ---- 回归：value 为空时的初始内容 ----
+        // 曾经 buildDOM() 先于 setContent 执行，'' || this.el.innerHTML 取到的是编辑器自身 DOM，
+        // 导致工具栏/状态栏被塞进正文（所有 demo 都传 value，|| 短路，长期未暴露）
+        {
+          const emptyHost = document.createElement('div')
+          const emptyEd = KEditor.create(emptyHost, { placeholder: 'PH' })
+          const emptyRoot = emptyHost.querySelector('[data-ke-root]')
+          const emptyHTML = emptyRoot.innerHTML
+          check(
+            'value 为空时正文不含编辑器自身 DOM',
+            !emptyRoot.querySelector('.ke-tb,.ke-status,.ke-preview,.ke-dropzone') && !/ke-tb|ke-status/.test(emptyHTML),
+            emptyHTML.slice(0, 90),
+          )
+          check('value 为空时正文为空占位', emptyHTML === '<p><br></p>' && emptyEd.getText().trim() === '', emptyHTML)
+          check('value 为空时 placeholder 生效', emptyRoot.classList.contains('ke-is-empty'), emptyRoot.className)
+          emptyEd.destroy()
+
+          // 宿主已有内容 + 不传 value → 继承宿主内容（该 fallback 的设计意图）
+          const seedHost = document.createElement('div')
+          seedHost.innerHTML = '<p>宿主已有内容</p>'
+          const seedEd = KEditor.create(seedHost, {})
+          check('宿主内容被继承为初始正文', seedEd.getText().includes('宿主已有内容'), seedEd.getHTML().slice(0, 60))
+          check('继承后不含编辑器自身 DOM', !seedHost.querySelector('[data-ke-root] .ke-tb'), '')
+          seedEd.destroy()
+
+          // 显式 value 优先于宿主内容
+          const prioHost = document.createElement('div')
+          prioHost.innerHTML = '<p>宿主内容</p>'
+          const prioEd = KEditor.create(prioHost, { value: '<p>显式值</p>' })
+          check(
+            '显式 value 优先于宿主内容',
+            prioEd.getText().includes('显式值') && !prioEd.getText().includes('宿主内容'),
+            prioEd.getText().slice(0, 40),
+          )
+          prioEd.destroy()
+        }
+
         editor.destroy()
         check('销毁后清空容器', document.getElementById('editor').innerHTML === '' && !document.getElementById('editor').classList.contains('ke'), '')
 

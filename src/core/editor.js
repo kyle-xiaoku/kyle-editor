@@ -60,6 +60,9 @@ export class KEditor {
     this.options = mergeOptions(options)
     this.id = `ke-${(instanceSeq += 1)}`
     this.el = resolveTarget(target, this.id)
+    // 必须在 buildDOM() 之前捕获：buildDOM 会清空 this.el 并塞入编辑器自身 DOM，
+    // 之后再读 this.el.innerHTML 取到的是工具栏/状态栏，会被当成正文内容（value 为空时触发）
+    const hostHTML = this.el.innerHTML
     this.emitters = new Map()
     this.domListeners = []
     this.destroyed = false
@@ -82,7 +85,7 @@ export class KEditor {
     this.mainEl.append(this.source.el, this.previewPanel.el)
 
     this.applyTheme()
-    this.setContent(this.options.value || this.el.innerHTML, { sanitize: this.options.sanitize, silent: true })
+    this.setContent(this.options.value || hostHTML, { sanitize: this.options.sanitize, silent: true })
     this.bindEvents()
     this.setReadOnly(this.options.readOnly)
     this.refresh()

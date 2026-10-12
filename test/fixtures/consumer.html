@@ -197,6 +197,24 @@ try {
   }
   localApp.unmount()
   ok('unmount 后卸载编辑器', !document.querySelector('#vue-box .ke-tb'))
+
+  // 用法 C：不传 v-model（npm 安装后最常见场景）——正文应为空，且不得把编辑器自身 DOM 当内容
+  const emptyApp = createApp({
+    setup() {
+      return () => h('div', [h(KV.default, { options: { uploader: 'mock', placeholder: 'EMPTY_PH' } })])
+    },
+  })
+  emptyApp.mount('#vue-box')
+  await new Promise((r) => setTimeout(r, 900))
+  const emptyRoot = document.querySelector('#vue-box [data-ke-root]')
+  ok('未传 v-model 时正文为空占位', !!emptyRoot && emptyRoot.innerHTML === '<p><br></p>',
+     emptyRoot ? emptyRoot.innerHTML.slice(0, 70) : 'no root')
+  ok('未传 v-model 时不含编辑器自身 DOM',
+     !!emptyRoot && !emptyRoot.querySelector('.ke-tb,.ke-status,.ke-preview,.ke-dropzone'),
+     emptyRoot ? emptyRoot.innerHTML.slice(0, 70) : 'no root')
+  ok('未传 v-model 时 placeholder 生效', !!emptyRoot && emptyRoot.classList.contains('ke-is-empty'),
+     emptyRoot ? emptyRoot.className : 'no root')
+  emptyApp.unmount()
 } catch (e) {
   ok('Vue UMD 组件挂载', false, e.message)
 }

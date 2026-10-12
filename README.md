@@ -113,8 +113,6 @@ npm run dev            # 静态服务 http://127.0.0.1:5178
 ```bash
 npm run build
 npm run dev &                                    # 启动静态服务
-node test/run-headless.mjs                       # 冒烟用例（需本机 Chrome）
-node test/check-page.mjs                         # 三个 demo 页面健康检查
 ```
 
 当前状态：`40/40` 用例通过，demo 页面无控制台报错。
@@ -127,61 +125,6 @@ node test/check-page.mjs                         # 三个 demo 页面健康检�
 | [docs/api.md](docs/api.md) | 全部配置项、实例方法与事件、工具栏自定义 |
 | [docs/upload-adapter.md](docs/upload-adapter.md) | 分片上传流程、后端接口约定、自定义适配器 |
 
-## 目录结构
-
-```
-src/
-├── index.js              # 入口（导出 create/KEditor/适配器/工具函数）
-├── core/                 # 编辑器内核
-│   ├── editor.js         # 组装 DOM、事件、状态、对外 API
-│   ├── toolbar.js        # 工具栏声明式配置
-│   ├── commands.js       # 富文本指令（字号/颜色/对齐/列表/表格/链接…）
-│   ├── sanitize.js       # HTML 白名单净化 + Word 粘贴清洗
-│   ├── paste.js          # 粘贴/拖拽（截图直传、外链图片本地化）
-│   ├── history.js        # 快照式撤销栈（保留光标）
-│   ├── selection.js      # 选区与光标工具
-│   ├── format.js         # HTML 美化输出
-│   └── icons.js          # 内置 SVG 图标
-├── upload/               # 分片上传
-│   ├── chunk-uploader.js # 切片、并发、重试、进度、取消
-│   ├── adapters.js       # mock / http / simple 适配器
-│   └── fingerprint.js    # 秒传与断点续传指纹
-├── media/media.js        # 图片视频插入、占位块、压缩、替换
-├── ui/                   # 样式注入、弹层、源码面板、预览、气泡工具条、toast
-└── vue/index.js          # Vue 3 插件 + 组件 + useKEditor
-
-types/                    # 手写 TypeScript 声明（核心 + Vue）
-docs/                     # 集成文档（index / integration / api / upload-adapter / npm-publish）
-demo/                     # script / esm / vue 三种集成示例页
-test/                     # 无头冒烟用例、页面健康检查、发布配置校验、视觉截图
-```
-
-## 开发与验证
-
-```bash
-python3 -m http.server 5178 --bind 127.0.0.1   # 或 npm run dev
-
-npm run build          # 产出 dist/：keditor.{es.js,cjs,umd.js} + keditor-vue.{es.js,cjs,umd.js}
-npm test               # 无头 Chrome 跑 66 项功能冒烟（test/smoke.html）
-npm run test:pages     # 4 个 demo 页面健康检查（挂载/控制台错误）
-npm run test:types     # .d.ts 语法校验（无需 tsc）
-npm run test:package   # 63 项发布配置校验（包名/exports/.cjs 后缀/裸说明符）
-npm run verify         # 上述全部一次跑完
-npm run test:visual    # 9 个关键界面截图到 test/screenshots/
-```
-
-当前状态：构建通过，**86/86 冒烟用例通过**，4 个 demo 页面零控制台错误，63 项发布配置校验通过。覆盖范围包括：输入与统计、全部工具栏指令、列表嵌套、表格与行列增删、颜色面板（选色/最近使用/自定义）、段落样式面板、字号面板、图片与视频的网络链接插入、链接校验、图片拖拽缩放（把手定位/拖拽改变宽度/取消选中隐藏）、图片对齐（缩小后工具栏与气泡两条入口均居中生效且按钮高亮）、粘贴净化（含 XSS 拦截）、拖拽上传、分片进度与取消、历史撤销重做、源码模式双向同步与按钮态、预览、只读、Vue 插件与 v-model、UMD 全局挂载。
-
-## 发布到 npm
-
-包名 `kyle-editor`（`keditor` 已被占用）。发布配置、本地验证、版本管理、私有源与 CI 自动发布全流程见 **[docs/npm-publish.md](docs/npm-publish.md)**。
-
-```bash
-npm login              # 登录（浏览器授权）
-npm run release        # 构建 + 全量验证 + npm publish --access public
-```
-
-已实测：从 tarball 全新安装后，CJS / ESM × 核心 / `kyle-editor/vue` 四个入口均能正确解析并拿到完整导出。
 
 ## 已知限制
 

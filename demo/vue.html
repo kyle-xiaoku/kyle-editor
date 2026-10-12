@@ -73,7 +73,8 @@
 
       const App = {
         setup() {
-          const html = ref('<p>Vue 中使用 KEditor：v-model 直接绑定 HTML 字符串。</p>')
+          // 初始为空：编辑器只显示 placeholder；示例内容点右侧「写入示例」按钮
+          const html = ref('')
           const disabled = ref(false)
           const showHtml = ref(false)
           const uploading = ref(0)

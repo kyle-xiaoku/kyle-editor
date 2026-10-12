@@ -86,7 +86,9 @@ npm view kyle-editor version
   },
 
   // 白名单：只有这些会进 tarball（node_modules / demo / test 自动排除）
-  "files": ["dist", "src", "types", "docs", "README.md", "LICENSE"],
+  // ⚠️ 只发消费方真正用到的：构建产物 dist + 类型声明 types + README/LICENSE
+  //    src（源码）与 docs（项目文档）不打进 npm 包，包体可减约 35%
+  "files": ["dist", "types", "README.md", "LICENSE"],
 
   // 样式随 JS 运行时注入，禁止 tree-shaking 误删 → 必须为 true
   "sideEffects": true,

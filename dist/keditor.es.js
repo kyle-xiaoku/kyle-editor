@@ -3430,6 +3430,7 @@ class KEditor {
     this.options = mergeOptions(options);
     this.id = `ke-${instanceSeq += 1}`;
     this.el = resolveTarget(target, this.id);
+    const hostHTML = this.el.innerHTML;
     this.emitters = /* @__PURE__ */ new Map();
     this.domListeners = [];
     this.destroyed = false;
@@ -3450,7 +3451,7 @@ class KEditor {
     this.bubble = new MediaBubble(this);
     this.mainEl.append(this.source.el, this.previewPanel.el);
     this.applyTheme();
-    this.setContent(this.options.value || this.el.innerHTML, { sanitize: this.options.sanitize, silent: true });
+    this.setContent(this.options.value || hostHTML, { sanitize: this.options.sanitize, silent: true });
     this.bindEvents();
     this.setReadOnly(this.options.readOnly);
     this.refresh();
