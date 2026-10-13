@@ -1,0 +1,9 @@
+{
+  "code": 0,
+  "data": {
+    "list": [
+      { "id": "tech", "name": "技术前沿", "desc": "研发动态", "href": "https://mp.weixin.qq.com/s/tech" },
+      { "id": "product", "name": "产品更新", "group": "运营", "href": "https://mp.weixin.qq.com/s/product" }
+    ]
+  }
+}

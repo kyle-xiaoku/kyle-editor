@@ -467,6 +467,148 @@ export function linkPanel({ url = '', text = '', target = false, onSubmit, onCan
   return wrap
 }
 
+/* ---------------------------- 自定义下拉选择面板 ---------------------------- */
+
+/** 链接提示：只显示域名，避免长 URL 撑破面板 */
+function hostOf(url) {
+  try {
+    return new URL(url, window.location.href).host
+  } catch {
+    return String(url).slice(0, 40)
+  }
+}
+
+/**
+ * 下拉选择面板：支持异步数据（加载 / 失败重试 / 空态）、搜索过滤、分组、跳转链接提示
+ * @param {object} opts
+ * @param {() => Promise<Array>} opts.load   取数据（内部已做缓存与并发去重）
+ * @param {() => Promise<Array>} opts.reload 强制重新取数
+ * @param {(item) => object|null} opts.linkOf 该项对应的跳转链接（用于展示提示）
+ * @param {(item) => void} opts.onPick
+ */
+export function selectPanel({ title, note, searchable, width, remote, value, load, reload, linkOf, onPick, emptyText }) {
+  const wrap = panel(title)
+  wrap.classList.add('ke-panel-wide', 'ke-panel-select')
+  if (width) wrap.style.width = `${Math.min(420, Math.max(200, Number(width)))}px`
+
+  const head = wrap.querySelector('.ke-panel-head')
+  const countEl = h('span.ke-panel-note', { text: note || '' })
+  if (remote) {
+    head.appendChild(h('button.ke-panel-icon', {
+      type: 'button',
+      title: '重新加载数据',
+      html: icon('retry'),
+      onclick: () => run(reload || load, true),
+    }))
+  }
+  head.appendChild(countEl)
+
+  const body = h('div.ke-sel-body')
+  wrap.appendChild(body)
+
+  let items = []
+  let keyword = ''
+  let generation = 0
+
+  if (searchable) {
+    const search = h('input.ke-input.ke-sel-search', {
+      type: 'search',
+      placeholder: '搜索…',
+      'data-k-autofocus': '',
+    })
+    search.addEventListener('input', () => {
+      keyword = search.value.trim().toLowerCase()
+      renderRows()
+    })
+    wrap.insertBefore(search, body)
+  }
+
+  function setState(kind, message) {
+    body.textContent = ''
+    body.dataset.state = kind
+    if (kind === 'loading') {
+      for (let i = 0; i < 3; i += 1) body.appendChild(h('div.ke-sel-skel'))
+      body.insertBefore(h('div.ke-sel-loading', {}, [h('span.ke-spinner'), '数据加载中…']), body.firstChild)
+    } else if (kind === 'error') {
+      body.appendChild(
+        h('div.ke-sel-tip', {}, [
+          h('span.ke-sel-tip-text', { text: message || '数据加载失败' }),
+          h('button.ke-btn-primary', { type: 'button', text: '重试', onclick: () => run(reload || load, true) }),
+        ]),
+      )
+    } else {
+      body.appendChild(h('div.ke-sel-tip', {}, [h('span.ke-sel-tip-text', { text: message || emptyText || '暂无数据' })]))
+    }
+  }
+
+  function renderRows() {
+    const list = keyword
+      ? items.filter((item) => `${item.label} ${item.desc} ${item.value} ${item.group}`.toLowerCase().includes(keyword))
+      : items
+    countEl.textContent = note || (keyword ? `${list.length} / ${items.length} 项` : `${items.length} 项`)
+    body.textContent = ''
+    delete body.dataset.state
+    if (!list.length) {
+      setState('empty', keyword ? `没有匹配「${keyword}」的选项` : emptyText || '暂无数据')
+      return
+    }
+    let group = null
+    list.forEach((item) => {
+      if (item.group && item.group !== group) {
+        group = item.group
+        body.appendChild(h('div.ke-panel-sect', { text: group }))
+      }
+      body.appendChild(row(item))
+    })
+  }
+
+  function row(item) {
+    const link = linkOf ? linkOf(item) : null
+    const el = h('button.ke-sel-row', {
+      type: 'button',
+      disabled: item.disabled || undefined,
+      dataset: { kValue: item.value },
+      title: item.disabled ? '该项不可用' : link && link.mode === 'open' ? `打开 ${link.url}` : link ? `插入链接：${link.url}` : item.title || '',
+      onclick: () => {
+        if (item.disabled) return
+        onPick(item)
+      },
+    })
+    el.appendChild(h('span.ke-sel-main', {}, [
+      h('span.ke-sel-label', { text: item.label }),
+      item.desc ? h('span.ke-sel-desc', { text: item.desc }) : null,
+      link ? h('span.ke-sel-link', { html: `${icon('link')}<i>${hostOf(link.url)}</i>` }) : null,
+    ]))
+    if (value && String(value) === String(item.value)) {
+      el.classList.add('ke-is-active')
+      el.appendChild(h('span.ke-sel-check', { html: icon('check') }))
+    }
+    if (link) el.classList.add('ke-has-link')
+    return el
+  }
+
+  function run(task, force) {
+    generation += 1
+    const mine = generation
+    setState('loading')
+    Promise.resolve()
+      .then(() => task({ force }))
+      .then((result) => {
+        if (mine !== generation || !wrap.isConnected) return // 面板已关闭或已被新请求取代
+        items = Array.isArray(result) ? result : []
+        if (!items.length) setState('empty')
+        else renderRows()
+      })
+      .catch((error) => {
+        if (mine !== generation || !wrap.isConnected) return
+        setState('error', error && error.message ? error.message : '数据加载失败')
+      })
+  }
+
+  run(load)
+  return wrap
+}
+
 export function normalizeUrl(url) {
   const value = String(url || '').trim()
   if (!value) return ''

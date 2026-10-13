@@ -1,7 +1,16 @@
-/** 工具栏：声明式配置，可整体替换或裁剪（options.toolbar） */
+/** 工具栏：声明式配置，可整体替换或裁剪（options.toolbar），支持自定义下拉按钮（options.customButtons） */
 import { h } from '../core/utils.js'
 import { icon } from '../core/icons.js'
-import { colorPanel, headingPanel, fontSizePanel, tablePanel, linkPanel, mediaPanel, normalizeUrl } from '../ui/popover.js'
+import { colorPanel, headingPanel, fontSizePanel, tablePanel, linkPanel, mediaPanel, selectPanel, normalizeUrl } from '../ui/popover.js'
+import {
+  normalizeCustomButton,
+  createButtonRuntime,
+  loadItems,
+  setRuntimeItems,
+  abortRuntime,
+  applySelection,
+  resolveLink,
+} from './custom-button.js'
 
 const CARET = '<svg class="ke-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
 
@@ -58,12 +67,15 @@ const ITEMS = {
 }
 
 export class Toolbar {
-  constructor(editor, items = DEFAULT_TOOLBAR) {
+  constructor(editor, items = DEFAULT_TOOLBAR, customButtons = []) {
     this.editor = editor
     this.buttons = new Map()
+    /** 自定义按钮：name -> {spec, rt, button} */
+    this.custom = new Map()
     this.colorState = { foreColor: '#3f3f3f', backColor: '#f6c344' }
     this.recent = { foreColor: [], backColor: [] }
     this.el = editor.tbEl
+    for (const spec of customButtons) this.registerCustom(spec)
     this.build(items)
     this.setupScrollHints()
   }
@@ -71,16 +83,23 @@ export class Toolbar {
   build(items) {
     const group = h('div.ke-tb-group')
     this.el.appendChild(group)
-    let tail = null
-    const target = () => tail || group
+    this.groupEl = group
+    this.tailEl = null
+    const target = () => this.tailEl || group
     for (const key of items) {
       if (key === '|') {
-        group.appendChild(h('span.ke-tb-sep'))
+        target().appendChild(h('span.ke-tb-sep'))
         continue
       }
       if (key === ':tail') {
-        tail = h('div.ke-tb-tail')
-        this.el.appendChild(tail)
+        this.tailEl = h('div.ke-tb-tail')
+        this.el.appendChild(this.tailEl)
+        continue
+      }
+      if (this.custom.has(key)) {
+        const entry = this.custom.get(key)
+        entry.button = this.buildCustomButton(entry)
+        target().appendChild(entry.button)
         continue
       }
       if (key === 'heading') {
@@ -94,6 +113,14 @@ export class Toolbar {
       const spec = ITEMS[key]
       if (!spec) continue
       target().appendChild(this.buildButton(key, spec))
+    }
+    // toolbar 数组里没列到的自定义按钮也要可用（运行时 addButton 依赖）
+    for (const [name, entry] of this.custom) {
+      if (!entry.button) {
+        entry.button = this.buildCustomButton(entry)
+        target().appendChild(entry.button)
+      }
+      entry.button.dataset.kCustom = name
     }
   }
 
@@ -214,6 +241,184 @@ export class Toolbar {
     return button
   }
 
+  /* ---------------- 自定义按钮 ---------------- */
+
+  /** 登记一个自定义按钮规格；统一在此规范化，保证配置与 addButton 两条路径行为一致 */
+  registerCustom(raw) {
+    const spec = normalizeCustomButton(raw)
+    if (!spec) return null
+    const prev = this.custom.get(spec.name)
+    const entry = { spec, rt: prev ? prev.rt : createButtonRuntime(), button: prev ? prev.button : null }
+    this.custom.set(spec.name, entry)
+    return entry
+  }
+
+  buildCustomButton(entry) {
+    const { spec } = entry
+    const isSelect = spec.type === 'select'
+    const button = h('button.ke-btn', {
+      type: 'button',
+      class: isSelect ? 'ke-btn-label ke-btn-custom' : 'ke-btn-custom',
+      title: spec.title,
+      'data-k-item': spec.name,
+      dataset: { kPop: spec.name },
+      onclick: (event) => {
+        event.preventDefault()
+        if (isSelect) this.openCustom(spec.name)
+        else this.runCustomButton(spec)
+      },
+    })
+    if (spec.icon) button.innerHTML = /</.test(spec.icon) ? spec.icon : icon(spec.icon)
+    if (isSelect) {
+      button.appendChild(h('span.ke-btn-text', { text: spec.text || spec.placeholder }))
+      button.insertAdjacentHTML('beforeend', CARET)
+    } else if (spec.text) {
+      button.appendChild(h('span.ke-btn-text', { text: spec.text }))
+    }
+    this.syncCustomLabel(spec.name, button) // 此时 entry.button 尚未赋值，显式传入
+    return button
+  }
+
+  /** 按钮文案跟随当前选中项（与段落样式 / 字号按钮一致） */
+  syncCustomLabel(name, node) {
+    const entry = this.custom.get(name)
+    const button = node || entry?.button
+    if (!entry || !button) return
+    const { spec, rt } = entry
+    if (spec.type !== 'select') return
+    const label = button.querySelector('.ke-btn-text')
+    if (!label) return
+    const picked = rt.value
+    label.textContent = picked ? picked.label : spec.text || spec.placeholder
+    button.title = picked ? `${spec.title}：${picked.label}` : spec.title
+    button.classList.toggle('ke-has-value', !!picked)
+  }
+
+  /** 打开下拉面板：数据异步加载，带缓存 / 重试 / 搜索 */
+  openCustom(name) {
+    const entry = this.custom.get(name)
+    if (!entry) return
+    this.revealButton(entry.button) // 溢出时先滚进可视区，避免面板锚在看不见的按钮上
+    const { spec, rt } = entry
+    const remote = !!(spec.load || spec.url)
+    const fetcher = ({ force } = {}) => loadItems(spec, this.editor, rt, { force })
+    this.togglePop(name, entry.button, () =>
+      selectPanel({
+        title: spec.title,
+        note: spec.note || '',
+        searchable: spec.searchable,
+        width: spec.width,
+        remote,
+        value: rt.value ? rt.value.value : '',
+        emptyText: spec.emptyText,
+        load: fetcher,
+        reload: fetcher,
+        linkOf: (item) => resolveLink(spec, item, this.editor),
+        onPick: (item) => this.pickCustom(name, item),
+      }))
+  }
+
+  async pickCustom(name, item) {
+    const entry = this.custom.get(name)
+    if (!entry) return
+    this.editor.popover.close()
+    try {
+      await applySelection(this.editor, entry.spec, entry.rt, item)
+    } catch (error) {
+      this.editor.reportError('custombutton', error)
+    }
+    this.syncCustomLabel(name)
+    this.editor.refresh()
+  }
+
+  /** type:'button' 的简单自定义按钮 */
+  async runCustomButton(spec) {
+    this.editor.popover.close()
+    try {
+      if (spec.onClick) await spec.onClick({ editor: this.editor, name: spec.name })
+      this.editor.emit('customclick', { name: spec.name, editor: this.editor })
+    } catch (error) {
+      this.editor.reportError('custombutton', error)
+    }
+    this.editor.refresh()
+  }
+
+  /** 运行时新增自定义按钮；at 为 toolbar 内插入位置（默认追加到主分组末尾） */
+  addButton(spec, { at } = {}) {
+    const entry = this.registerCustom(spec)
+    if (!entry) return null
+    if (entry.button) entry.button.remove()
+    entry.button = this.buildCustomButton(entry)
+    const host = this.tailEl || this.groupEl
+    if (!host) return entry.button
+    if (typeof at === 'number' && at >= 0) {
+      const ref = host.children[Math.min(at, host.children.length)]
+      host.insertBefore(entry.button, ref || null)
+    } else {
+      const sep = h('span.ke-tb-sep')
+      host.appendChild(sep)
+      host.appendChild(entry.button)
+    }
+    this.revealButton(entry.button) // 新按钮可能被 sticky 尾栏遮住，滚进可视区让用户看到
+    this.syncScrollHints?.()
+    return entry.button
+  }
+
+  /** 工具栏溢出时把按钮滚进可视区（避开 sticky 尾栏的遮挡） */
+  revealButton(button) {
+    const tb = this.el
+    if (!tb || !button || !button.isConnected) return
+    const max = tb.scrollWidth - tb.clientWidth
+    if (max <= 1) return
+    const tailW = this.tailEl ? this.tailEl.offsetWidth : 0
+    const left = button.offsetLeft
+    const right = left + button.offsetWidth
+    const viewR = tb.scrollLeft + tb.clientWidth - tailW
+    if (right > viewR - 4) tb.scrollLeft = Math.min(max, right - tb.clientWidth + tailW + 10)
+    else if (left < tb.scrollLeft + 4) tb.scrollLeft = Math.max(0, left - 10)
+  }
+
+  /** 移除自定义按钮并中断其未完成的请求 */
+  removeButton(name) {
+    const entry = this.custom.get(name)
+    if (!entry) return false
+    abortRuntime(entry.rt)
+    if (this.editor.popover.anchor === entry.button) this.editor.popover.close()
+    entry.button?.remove()
+    this.buttons.delete(name)
+    this.custom.delete(name)
+    this.syncScrollHints?.()
+    return true
+  }
+
+  /** 外部灌入下拉数据（接口在编辑器之外请求时用），并刷新已打开的面板 */
+  setButtonOptions(name, items) {
+    const entry = this.custom.get(name)
+    if (!entry) return null
+    const list = setRuntimeItems(entry.rt, items)
+    if (this.editor.popover.isOpen && this.editor.popover.anchor === entry.button) {
+      this.editor.popover.close()
+      this.openCustom(name)
+    }
+    return list
+  }
+
+  /** 读取按钮当前选中项 */
+  getButtonValue(name) {
+    const entry = this.custom.get(name)
+    return entry ? entry.rt.value : null
+  }
+
+  setButtonValue(name, value) {
+    const entry = this.custom.get(name)
+    if (!entry) return null
+    const items = entry.rt.items || []
+    const match = items.find((item) => String(item.value) === String(value)) || null
+    entry.rt.value = match
+    this.syncCustomLabel(name)
+    return match
+  }
+
   toggleColor(name, button) {
     const kind = name === 'foreColor' ? 'fore' : 'back'
     this.togglePop(name, button, () =>
@@ -303,6 +508,13 @@ export class Toolbar {
       const active = spec.active?.(state) || false
       if (button.dataset.kPop || !spec.pop) button.classList.toggle('ke-is-active', active)
       if (spec.enabled) button.disabled = !spec.enabled(state)
+    }
+    for (const [name, entry] of this.custom) {
+      const { spec, button } = entry
+      if (!button) continue
+      if (spec.active) button.classList.toggle('ke-is-active', !!spec.active(state, this.editor))
+      if (spec.enabled) button.disabled = !spec.enabled(state, this.editor)
+      if (spec.type === 'select') this.syncCustomLabel(name)
     }
     if (this.headingEl) {
       const match = HEADINGS.find((x) => x.value === state.block)
@@ -444,6 +656,8 @@ export class Toolbar {
     if (this.hintTimer) { clearTimeout(this.hintTimer); this.hintTimer = null }
     if (this.onTbScroll) tb.removeEventListener('scroll', this.onTbScroll)
     if (this.onTbPointerDown) tb.removeEventListener('pointerdown', this.onTbPointerDown)
+    for (const entry of this.custom.values()) abortRuntime(entry.rt) // 中断未完成的接口请求
+    this.custom.clear()
     this.scrollFades?.remove()
     this.hintEl?.remove()
     this.scrollFades = null

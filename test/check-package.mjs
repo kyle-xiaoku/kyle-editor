@@ -114,8 +114,10 @@ ok(existsSync(join(root, 'LICENSE')), 'LICENSE 文件存在')
 for (const s of ['build', 'verify', 'pack:check', 'release', 'prerelease']) {
   ok(!!pkg.scripts?.[s], `scripts.${s} 已定义`)
 }
-ok(pkg.scripts.release.includes('--access public'), 'release 带 --access public')
-ok(pkg.scripts.prerelease.includes('verify'), 'prerelease 会先跑 verify')
+// 字段缺失时不能抛 TypeError 崩溃，否则报告会被堆栈信息掩盖
+ok((pkg.scripts?.release || '').includes('--access public'), 'release 带 --access public')
+ok((pkg.scripts?.prerelease || '').includes('verify'), 'prerelease 会先跑 verify')
+ok((pkg.scripts?.release || '').includes('registry.npmjs.org'), 'release 写死 npmjs 官方源（避开只读镜像）')
 
 console.log(`\n发布配置校验：${pass} 项通过${fails.length ? `，${fails.length} 项失败` : ''}`)
 if (fails.length) {

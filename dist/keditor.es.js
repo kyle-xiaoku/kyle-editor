@@ -199,6 +199,43 @@ const CSS$1 = `
 .ke-size-cell:hover { border-color: var(--ke-primary); color: var(--ke-primary); background: var(--ke-primary-weak); }
 .ke-size-cell.ke-is-active { border-color: var(--ke-primary); background: var(--ke-primary); color: #fff; }
 
+/* -------- 自定义下拉按钮 -------- */
+.ke-btn-custom .ke-btn-text { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-btn-custom.ke-has-value { color: var(--ke-primary); }
+.ke-panel-icon { margin-left: auto; width: 22px; height: 22px; padding: 0; border: 1px solid var(--ke-line); border-radius: 50%; background: #fff; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.ke-panel-icon:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
+.ke-panel-icon .ke-ico { width: 13px; height: 13px; }
+.ke-panel-icon + .ke-panel-note { margin-left: 8px; }
+
+.ke-panel-select .ke-sel-search { margin-bottom: 8px; }
+.ke-sel-body { max-height: 268px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+.ke-sel-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 9px; margin-bottom: 3px; border: 1px solid transparent; border-radius: 8px;
+  background: #fff; cursor: pointer; text-align: left; transition: background .14s, border-color .14s;
+}
+.ke-sel-row:last-child { margin-bottom: 0; }
+.ke-sel-row:hover:not(:disabled) { background: #f7f8fa; }
+.ke-sel-row:disabled { cursor: not-allowed; opacity: .45; }
+.ke-sel-row.ke-is-active { border-color: var(--ke-primary); background: var(--ke-primary-weak); }
+.ke-sel-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ke-sel-label { color: #1f2329; font-size: 13.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-sel-row.ke-is-active .ke-sel-label { color: var(--ke-primary); font-weight: 600; }
+.ke-sel-desc { color: #a2a8b3; font-size: 11.5px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-sel-link { display: inline-flex; align-items: center; gap: 3px; color: #2f6fed; font-size: 11px; }
+.ke-sel-link .ke-ico { width: 11px; height: 11px; flex: none; }
+.ke-sel-link i { font-style: normal; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.ke-sel-check { flex: none; width: 16px; height: 16px; color: var(--ke-primary); }
+.ke-sel-check .ke-ico { width: 16px; height: 16px; }
+
+.ke-sel-loading { display: flex; align-items: center; gap: 8px; padding: 4px 2px 10px; color: #6b7280; font-size: 12.5px; }
+.ke-sel-loading .ke-spinner { width: 14px; height: 14px; }
+.ke-sel-skel { height: 34px; margin-bottom: 6px; border-radius: 8px; background: linear-gradient(90deg, #f2f3f5 25%, #e9ebef 37%, #f2f3f5 63%); background-size: 400% 100%; animation: ke-skel 1.3s ease infinite; }
+@keyframes ke-skel { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+.ke-sel-tip { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 12px; text-align: center; }
+.ke-sel-tip-text { color: #a2a8b3; font-size: 12.5px; line-height: 1.6; word-break: break-all; }
+.ke-sel-tip .ke-btn-primary { align-self: center; }
+
 .ke-tabs { display: flex; gap: 4px; margin: -12px -14px 12px; padding: 0 14px; background: #f8f9fb; border-bottom: 1px solid var(--ke-line-weak); }
 .ke-tab { height: 34px; padding: 0 4px; margin-right: 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #6b7280; font-size: 13px; cursor: pointer; }
 .ke-tab:hover { color: #1f2329; }
@@ -642,8 +679,8 @@ class Popover {
     this.el.classList.remove("ke-pop-in");
     void this.el.offsetWidth;
     this.el.classList.add("ke-pop-in");
-    const first = [...this.el.querySelectorAll("[data-k-autofocus]")].find((node) => node.offsetParent !== null);
-    (_a = first == null ? void 0 : first.focus) == null ? void 0 : _a.call(first);
+    const first2 = [...this.el.querySelectorAll("[data-k-autofocus]")].find((node) => node.offsetParent !== null);
+    (_a = first2 == null ? void 0 : first2.focus) == null ? void 0 : _a.call(first2);
   }
   close() {
     if (this.el.hidden) return;
@@ -987,6 +1024,121 @@ function linkPanel({ url = "", text = "", target = false, onSubmit, onCancel, on
     }
   });
   wrap.appendChild(body);
+  return wrap;
+}
+function hostOf(url) {
+  try {
+    return new URL(url, window.location.href).host;
+  } catch {
+    return String(url).slice(0, 40);
+  }
+}
+function selectPanel({ title, note, searchable, width, remote, value, load, reload, linkOf, onPick, emptyText }) {
+  const wrap = panel(title);
+  wrap.classList.add("ke-panel-wide", "ke-panel-select");
+  if (width) wrap.style.width = `${Math.min(420, Math.max(200, Number(width)))}px`;
+  const head = wrap.querySelector(".ke-panel-head");
+  const countEl = h("span.ke-panel-note", { text: note || "" });
+  if (remote) {
+    head.appendChild(h("button.ke-panel-icon", {
+      type: "button",
+      title: "重新加载数据",
+      html: icon("retry"),
+      onclick: () => run(reload || load, true)
+    }));
+  }
+  head.appendChild(countEl);
+  const body = h("div.ke-sel-body");
+  wrap.appendChild(body);
+  let items = [];
+  let keyword = "";
+  let generation = 0;
+  if (searchable) {
+    const search = h("input.ke-input.ke-sel-search", {
+      type: "search",
+      placeholder: "搜索…",
+      "data-k-autofocus": ""
+    });
+    search.addEventListener("input", () => {
+      keyword = search.value.trim().toLowerCase();
+      renderRows();
+    });
+    wrap.insertBefore(search, body);
+  }
+  function setState(kind, message) {
+    body.textContent = "";
+    body.dataset.state = kind;
+    if (kind === "loading") {
+      for (let i = 0; i < 3; i += 1) body.appendChild(h("div.ke-sel-skel"));
+      body.insertBefore(h("div.ke-sel-loading", {}, [h("span.ke-spinner"), "数据加载中…"]), body.firstChild);
+    } else if (kind === "error") {
+      body.appendChild(
+        h("div.ke-sel-tip", {}, [
+          h("span.ke-sel-tip-text", { text: message || "数据加载失败" }),
+          h("button.ke-btn-primary", { type: "button", text: "重试", onclick: () => run(reload || load, true) })
+        ])
+      );
+    } else {
+      body.appendChild(h("div.ke-sel-tip", {}, [h("span.ke-sel-tip-text", { text: message || emptyText || "暂无数据" })]));
+    }
+  }
+  function renderRows() {
+    const list = keyword ? items.filter((item) => `${item.label} ${item.desc} ${item.value} ${item.group}`.toLowerCase().includes(keyword)) : items;
+    countEl.textContent = note || (keyword ? `${list.length} / ${items.length} 项` : `${items.length} 项`);
+    body.textContent = "";
+    delete body.dataset.state;
+    if (!list.length) {
+      setState("empty", keyword ? `没有匹配「${keyword}」的选项` : emptyText || "暂无数据");
+      return;
+    }
+    let group = null;
+    list.forEach((item) => {
+      if (item.group && item.group !== group) {
+        group = item.group;
+        body.appendChild(h("div.ke-panel-sect", { text: group }));
+      }
+      body.appendChild(row(item));
+    });
+  }
+  function row(item) {
+    const link = linkOf ? linkOf(item) : null;
+    const el = h("button.ke-sel-row", {
+      type: "button",
+      disabled: item.disabled || void 0,
+      dataset: { kValue: item.value },
+      title: item.disabled ? "该项不可用" : link && link.mode === "open" ? `打开 ${link.url}` : link ? `插入链接：${link.url}` : item.title || "",
+      onclick: () => {
+        if (item.disabled) return;
+        onPick(item);
+      }
+    });
+    el.appendChild(h("span.ke-sel-main", {}, [
+      h("span.ke-sel-label", { text: item.label }),
+      item.desc ? h("span.ke-sel-desc", { text: item.desc }) : null,
+      link ? h("span.ke-sel-link", { html: `${icon("link")}<i>${hostOf(link.url)}</i>` }) : null
+    ]));
+    if (value && String(value) === String(item.value)) {
+      el.classList.add("ke-is-active");
+      el.appendChild(h("span.ke-sel-check", { html: icon("check") }));
+    }
+    if (link) el.classList.add("ke-has-link");
+    return el;
+  }
+  function run(task, force) {
+    generation += 1;
+    const mine = generation;
+    setState("loading");
+    Promise.resolve().then(() => task({ force })).then((result) => {
+      if (mine !== generation || !wrap.isConnected) return;
+      items = Array.isArray(result) ? result : [];
+      if (!items.length) setState("empty");
+      else renderRows();
+    }).catch((error) => {
+      if (mine !== generation || !wrap.isConnected) return;
+      setState("error", error && error.message ? error.message : "数据加载失败");
+    });
+  }
+  run(load);
   return wrap;
 }
 function normalizeUrl(url) {
@@ -1466,578 +1618,6 @@ function currentWidthPercent(img, figureWidth) {
   if (match) return parseFloat(match[1]);
   return img.getBoundingClientRect().width / figureWidth * 100;
 }
-const CARET = '<svg class="ke-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
-const SCROLL_HINT_KEY = "keditor.toolbarScrollHint";
-const SCROLL_HINT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7 4 12l4 5"/><path d="M16 7l4 5-4 5"/><path d="M4 12h16"/></svg>';
-const HEADINGS = [
-  { value: "p", label: "正文", desc: "默认段落 · 17px，正文内容都用它", sample: "正文示例文字", sampleClass: "s-body" },
-  { value: "h1", label: "标题一", desc: "大标题 · 22px 加粗，全文主标题（建议只用一次）", sample: "标题一示例", sampleClass: "s-h1" },
-  { value: "h2", label: "标题二", desc: "章节标题 · 20px 加粗，划分小节", sample: "标题二示例", sampleClass: "s-h2" },
-  { value: "h3", label: "标题三", desc: "小标题 · 18px 加粗，章节内的层级", sample: "标题三示例", sampleClass: "s-h3" }
-];
-const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
-const DEFAULT_TOOLBAR = [
-  "undo",
-  "redo",
-  "|",
-  "heading",
-  "fontsize",
-  "|",
-  "bold",
-  "italic",
-  "underline",
-  "strike",
-  "|",
-  "foreColor",
-  "backColor",
-  "|",
-  "alignLeft",
-  "alignCenter",
-  "alignRight",
-  "alignJustify",
-  "|",
-  "ul",
-  "ol",
-  "quote",
-  "|",
-  "link",
-  "image",
-  "video",
-  "table",
-  "code",
-  "hr",
-  "clear",
-  ":tail",
-  "source",
-  "preview",
-  "fullscreen"
-];
-const ITEMS = {
-  undo: { icon: "undo", title: "撤销 (⌘/Ctrl+Z)", run: (e) => e.undo(), active: (s) => !!s.canUndo, enabled: (s) => s.canUndo },
-  redo: { icon: "redo", title: "重做 (⌘/Ctrl+Shift+Z)", run: (e) => e.redo(), active: (s) => !!s.canRedo, enabled: (s) => s.canRedo },
-  bold: { glyph: ["B", "ke-glyph"], title: "加粗 (⌘/Ctrl+B)", cmd: "bold", active: (s) => s.bold },
-  italic: { glyph: ["I", "ke-glyph ke-glyph-i"], title: "斜体 (⌘/Ctrl+I)", cmd: "italic", active: (s) => s.italic },
-  underline: { glyph: ["U", "ke-glyph ke-glyph-u"], title: "下划线 (⌘/Ctrl+U)", cmd: "underline", active: (s) => s.underline },
-  strike: { glyph: ["S", "ke-glyph ke-glyph-s"], title: "删除线", cmd: "strike", active: (s) => s.strikeThrough },
-  alignLeft: { icon: "alignLeft", title: "左对齐", run: (e) => e.commands.setAlign("left"), active: (s) => s.align === "left" },
-  alignCenter: { icon: "alignCenter", title: "居中", run: (e) => e.commands.setAlign("center"), active: (s) => s.align === "center" },
-  alignRight: { icon: "alignRight", title: "右对齐", run: (e) => e.commands.setAlign("right"), active: (s) => s.align === "right" },
-  alignJustify: { icon: "alignJustify", title: "两端对齐", run: (e) => e.commands.setAlign("justify"), active: (s) => s.align === "justify" },
-  ul: { icon: "ul", title: "无序列表", run: (e) => e.commands.toggleList("unordered"), active: (s) => s.ul },
-  ol: { icon: "ol", title: "有序列表", run: (e) => e.commands.toggleList("ordered"), active: (s) => s.ol },
-  quote: { icon: "quote", title: "引用", run: (e) => e.commands.toggleBlockquote(), active: (s) => s.block === "blockquote" },
-  link: { icon: "link", title: "插入链接", run: (e) => e.toolbar.openLink(), active: (s) => s.link, toggles: true },
-  image: { icon: "image", title: "图片（本地上传 / 网络链接）", run: (e) => e.toolbar.openMedia("image"), toggles: true },
-  video: { icon: "video", title: "视频（本地上传 / 网络链接，支持分片上传）", run: (e) => e.toolbar.openMedia("video"), toggles: true },
-  table: { icon: "table", title: "插入表格", run: (e) => e.toolbar.openTable(), toggles: true },
-  code: { icon: "code", title: "代码块", run: (e) => e.commands.insertCodeBlock() },
-  hr: { icon: "hr", title: "分割线", run: (e) => e.commands.insertDivider() },
-  clear: { icon: "clear", title: "清除格式", run: (e) => e.commands.clearFormat() },
-  source: { icon: "source", title: "查看 / 编辑 HTML 源码（⌘/Ctrl+Shift+K）", text: "源码", run: (e) => e.toggleSource(), active: (s) => s.source },
-  preview: { icon: "preview", title: "预览效果（手机 / 平板 / 电脑宽度）", text: "预览", run: (e) => e.togglePreview(), active: (s) => s.preview },
-  fullscreen: { icon: "expand", title: "全屏编辑", text: "全屏", run: (e) => e.toggleFullscreen(), active: (s) => s.fullscreen },
-  foreColor: { pop: "fore", title: "字体颜色", toggles: true, swatch: "fore" },
-  backColor: { pop: "back", title: "背景高亮色", toggles: true, swatch: "back" }
-};
-class Toolbar {
-  constructor(editor, items = DEFAULT_TOOLBAR) {
-    this.editor = editor;
-    this.buttons = /* @__PURE__ */ new Map();
-    this.colorState = { foreColor: "#3f3f3f", backColor: "#f6c344" };
-    this.recent = { foreColor: [], backColor: [] };
-    this.el = editor.tbEl;
-    this.build(items);
-    this.setupScrollHints();
-  }
-  build(items) {
-    const group = h("div.ke-tb-group");
-    this.el.appendChild(group);
-    let tail = null;
-    const target = () => tail || group;
-    for (const key of items) {
-      if (key === "|") {
-        group.appendChild(h("span.ke-tb-sep"));
-        continue;
-      }
-      if (key === ":tail") {
-        tail = h("div.ke-tb-tail");
-        this.el.appendChild(tail);
-        continue;
-      }
-      if (key === "heading") {
-        target().appendChild(this.buildHeading());
-        continue;
-      }
-      if (key === "fontsize") {
-        target().appendChild(this.buildFontSize());
-        continue;
-      }
-      const spec = ITEMS[key];
-      if (!spec) continue;
-      target().appendChild(this.buildButton(key, spec));
-    }
-  }
-  buildButton(name, spec) {
-    const button = h("button.ke-btn", {
-      type: "button",
-      title: spec.title,
-      "data-k-item": name,
-      onclick: (event) => {
-        var _a;
-        event.preventDefault();
-        if (spec.pop) this.toggleColor(name, button);
-        else if (spec.cmd) this.editor.commands.toggleMark(spec.cmd);
-        else (_a = spec.run) == null ? void 0 : _a.call(spec, this.editor);
-        if (!spec.toggles) this.editor.popover.close();
-      }
-    });
-    if (spec.icon) button.innerHTML = icon(spec.icon);
-    if (spec.text) button.appendChild(h("span.ke-btn-text", { text: spec.text }));
-    if (spec.glyph) {
-      const [text, cls] = spec.glyph;
-      button.appendChild(h("span", { class: cls, text }));
-    }
-    if (spec.swatch) {
-      const color = spec.swatch === "fore" ? this.colorState.foreColor : this.colorState.backColor;
-      const face = h("span", { class: spec.swatch === "fore" ? "ke-glyph ke-glyph-a" : "ke-glyph ke-glyph-a ke-glyph-hl" });
-      face.appendChild(h("span", { text: "A" }));
-      button.appendChild(face);
-      if (spec.swatch === "fore") button.appendChild(h("span", { class: "ke-dot" }));
-      this.paintButton(button, spec.swatch, color);
-      button.dataset.kPop = spec.swatch === "fore" ? "foreColor" : "backColor";
-    }
-    if (spec.toggles && !spec.swatch) button.dataset.kPop = name;
-    this.buttons.set(name, button);
-    return button;
-  }
-  paintButton(button, kind, color) {
-    if (!button || !color) return;
-    button.style.setProperty(kind === "fore" ? "--ke-fore" : "--ke-back", color);
-  }
-  /* ---------------- 下拉面板 ---------------- */
-  openPop(anchor, builder, options = {}) {
-    this.editor.saveSelection();
-    this.editor.popover.open(anchor, builder, {
-      align: "start",
-      ...options,
-      onClose: () => {
-        var _a;
-        anchor.classList.remove("ke-is-open");
-        (_a = options.onClose) == null ? void 0 : _a.call(options);
-      }
-    });
-    anchor.classList.add("ke-is-open");
-  }
-  /** 同一个按钮再次点击 = 关闭；颜色按钮点击直接展开面板 */
-  togglePop(name, button, builder, options = {}) {
-    const pop = this.editor.popover;
-    if (pop.isOpen && pop.anchor === button) {
-      pop.close();
-      return;
-    }
-    this.openPop(button, builder, options);
-  }
-  buildHeading() {
-    const current = HEADINGS[0];
-    const button = h("button.ke-btn.ke-btn-label", {
-      type: "button",
-      title: "段落样式：正文 / 标题一 / 标题二 / 标题三",
-      "data-k-item": "heading",
-      dataset: { kPop: "heading" },
-      onclick: (event) => {
-        event.preventDefault();
-        this.togglePop("heading", button, () => headingPanel(HEADINGS, {
-          value: this.editor.getState().block,
-          onPick: (value) => {
-            this.editor.restoreSelection();
-            this.editor.commands.setHeading(value);
-            this.editor.popover.close();
-            this.editor.refresh();
-          }
-        }));
-      }
-    });
-    button.innerHTML = `<span class="ke-btn-text">${current.label}</span>${CARET}`;
-    this.headingEl = button;
-    this.buttons.set("heading", button);
-    return button;
-  }
-  buildFontSize() {
-    const button = h("button.ke-btn.ke-btn-label", {
-      type: "button",
-      title: "字号",
-      "data-k-item": "fontsize",
-      dataset: { kPop: "fontsize" },
-      onclick: (event) => {
-        event.preventDefault();
-        this.togglePop("fontsize", button, () => fontSizePanel(FONT_SIZES, {
-          value: this.editor.getState().fontSize,
-          onPick: (size) => {
-            this.editor.restoreSelection();
-            this.editor.commands.setFontSize(Number(size));
-            this.editor.popover.close();
-            this.editor.refresh();
-          }
-        }));
-      }
-    });
-    button.innerHTML = `<span class="ke-btn-text">字号</span>${CARET}`;
-    this.fontSizeEl = button;
-    this.buttons.set("fontsize", button);
-    return button;
-  }
-  toggleColor(name, button) {
-    const kind = name === "foreColor" ? "fore" : "back";
-    this.togglePop(
-      name,
-      button,
-      () => colorPanel({
-        title: kind === "fore" ? "字体颜色" : "背景高亮色",
-        kind,
-        value: this.colorState[name],
-        recents: this.recent[name],
-        onPick: (color) => this.applyColor(name, kind, color, button),
-        onClear: () => this.applyColor(name, kind, null, button)
-      }),
-      {
-        onClose: () => button.classList.remove("ke-is-active")
-      }
-    );
-  }
-  applyColor(name, kind, color, button) {
-    this.editor.restoreSelection();
-    if (color) {
-      this.colorState[name] = color;
-      this.recent[name] = [color, ...this.recent[name].filter((x) => x.toLowerCase() !== color.toLowerCase())].slice(0, 8);
-      this.paintButton(button, kind, color);
-    }
-    this.editor.commands.setColor(kind, color);
-    this.editor.popover.close();
-  }
-  openTable() {
-    const button = this.buttons.get("table");
-    this.togglePop("table", button, () => tablePanel((cols, rows) => {
-      this.editor.restoreSelection();
-      this.editor.commands.insertTable(cols, rows);
-      this.editor.popover.close();
-    }));
-  }
-  openLink() {
-    const button = this.buttons.get("link");
-    const state = this.editor.getState();
-    const existing = state.linkUrl;
-    this.togglePop("link", button, () => linkPanel({
-      url: existing || "",
-      text: existing ? "" : state.selectionText || "",
-      target: existing ? state.linkTarget : true,
-      onCancel: () => this.editor.popover.close(),
-      onRemove: existing ? () => {
-        this.editor.restoreSelection();
-        this.editor.commands.removeLink();
-        this.editor.popover.close();
-      } : null,
-      onSubmit: ({ url, text, target }) => {
-        this.editor.restoreSelection();
-        this.editor.commands.createLink({ url: normalizeUrl(url), text, target });
-        this.editor.popover.close();
-      }
-    }));
-  }
-  /** 图片 / 视频：本地上传 + 网络链接输入 */
-  openMedia(kind) {
-    const button = this.buttons.get(kind);
-    const editor = this.editor;
-    const options = editor.options;
-    this.togglePop(kind, button, () => mediaPanel(kind, {
-      multiple: kind === "image",
-      maxText: `${kind === "image" ? "图片" : "视频"}上限 ${formatLimit(kind === "image" ? options.maxImageSize : options.maxVideoSize)}`,
-      hint: kind === "image" ? "支持 PNG / JPG / GIF / WebP / SVG" : "支持 MP4 / MOV / WebM，大文件自动分片",
-      onFiles: (files) => {
-        editor.popover.close();
-        if (files && files.length) editor.media.addFiles([...files]);
-        else editor.media.pickFiles(kind);
-      },
-      onUrl: ({ url, name }) => {
-        editor.popover.close();
-        editor.restoreSelection();
-        editor.media.insertFromUrl(kind, url, name);
-      }
-    }));
-  }
-  /** 根据编辑器状态同步按钮高亮 / 下拉值 / 禁用 */
-  refresh(state) {
-    var _a;
-    for (const [name, button] of this.buttons) {
-      const spec = ITEMS[name];
-      if (!spec) continue;
-      const active = ((_a = spec.active) == null ? void 0 : _a.call(spec, state)) || false;
-      if (button.dataset.kPop || !spec.pop) button.classList.toggle("ke-is-active", active);
-      if (spec.enabled) button.disabled = !spec.enabled(state);
-    }
-    if (this.headingEl) {
-      const match = HEADINGS.find((x) => x.value === state.block);
-      const label = this.headingEl.querySelector(".ke-btn-text");
-      if (label) label.textContent = match ? match.label : "正文";
-      this.headingEl.title = match ? `${match.label}：${match.desc}` : "段落样式";
-    }
-    if (this.fontSizeEl) {
-      const label = this.fontSizeEl.querySelector(".ke-btn-text");
-      if (label) label.textContent = state.fontSize ? `${state.fontSize}px` : "字号";
-    }
-    if (state.linkUrl) {
-      const btn2 = this.buttons.get("link");
-      btn2 == null ? void 0 : btn2.classList.add("ke-is-active");
-    }
-  }
-  /* ---------------- 可滑动提示 ---------------- */
-  /**
-   * 工具栏溢出时给出四重可发现性提示：
-   * 常显滚动条（CSS）、右侧被遮工具的动态阴影、左侧渐隐、鼠标拖拽，
-   * 外加首次加载的引导气泡。
-   */
-  setupScrollHints() {
-    const tb = this.el;
-    const host = this.editor.el;
-    if (!tb.isConnected) return;
-    this.scrollFades = h("div.ke-tb-fades", { "aria-hidden": "true" }, [h("i.ke-tb-fade ke-tb-fade-l")]);
-    tb.insertAdjacentElement("afterend", this.scrollFades);
-    this.syncScrollHints = () => {
-      if (!tb.isConnected || !host.isConnected) return;
-      const max = tb.scrollWidth - tb.clientWidth;
-      const overflow = max > 1;
-      const left = tb.scrollLeft;
-      host.classList.toggle("ke-tb-scrollable", overflow);
-      host.classList.toggle("ke-tb-can-l", overflow && left > 1);
-      host.classList.toggle("ke-tb-can-r", overflow && left < max - 1);
-      host.style.setProperty("--ke-tb-h", `${tb.offsetHeight}px`);
-      if (overflow && !this.hintSettled) this.showScrollHint();
-    };
-    this.onTbScroll = () => {
-      this.syncScrollHints();
-      this.hideScrollHint();
-    };
-    tb.addEventListener("scroll", this.onTbScroll, { passive: true });
-    if (typeof ResizeObserver !== "undefined") {
-      this.tbRO = new ResizeObserver(() => this.syncScrollHints());
-      this.tbRO.observe(tb);
-    }
-    this.onTbPointerDown = (event) => {
-      this.hideScrollHint();
-      this.startDragScroll(event);
-    };
-    tb.addEventListener("pointerdown", this.onTbPointerDown);
-    requestAnimationFrame(this.syncScrollHints);
-  }
-  /** 鼠标按住拖动平移工具栏（触屏已有原生滑动，不介入） */
-  startDragScroll(event) {
-    const tb = this.el;
-    const host = this.editor.el;
-    if (event.button !== 0 || event.pointerType !== "mouse") return;
-    if (tb.scrollWidth <= tb.clientWidth + 1) return;
-    if (event.target.closest("input, textarea, select")) return;
-    const startX = event.clientX;
-    const startLeft = tb.scrollLeft;
-    let dragging = false;
-    const move = (ev) => {
-      var _a;
-      const dx = ev.clientX - startX;
-      if (!dragging) {
-        if (Math.abs(dx) < 5) return;
-        dragging = true;
-        try {
-          tb.setPointerCapture(event.pointerId);
-        } catch {
-        }
-        host.classList.add("ke-tb-dragging");
-        (_a = this.editor.popover) == null ? void 0 : _a.close();
-      }
-      ev.preventDefault();
-      tb.scrollLeft = startLeft - dx;
-    };
-    const up = () => {
-      tb.removeEventListener("pointermove", move);
-      tb.removeEventListener("pointerup", up);
-      tb.removeEventListener("pointercancel", up);
-      host.classList.remove("ke-tb-dragging");
-      if (!dragging) return;
-      try {
-        tb.releasePointerCapture(event.pointerId);
-      } catch {
-      }
-      const stop = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        release();
-      };
-      const release = () => {
-        clearTimeout(fallback);
-        tb.removeEventListener("click", stop, true);
-      };
-      const fallback = setTimeout(release, 400);
-      tb.addEventListener("click", stop, true);
-    };
-    tb.addEventListener("pointermove", move);
-    tb.addEventListener("pointerup", up);
-    tb.addEventListener("pointercancel", up);
-  }
-  showScrollHint() {
-    this.hintSettled = true;
-    let seen = false;
-    try {
-      seen = localStorage.getItem(SCROLL_HINT_KEY) === "1";
-    } catch {
-    }
-    if (seen) return;
-    this.hintEl = h("div.ke-tb-hint", { "aria-hidden": "true" }, [
-      h("span.ke-tb-hint-ico", { html: SCROLL_HINT_ICON }),
-      h("span", { text: "工具栏可左右滑动" })
-    ]);
-    this.editor.el.appendChild(this.hintEl);
-    this.hintTimer = setTimeout(() => this.hideScrollHint(), 3800);
-  }
-  hideScrollHint() {
-    if (this.hintTimer) {
-      clearTimeout(this.hintTimer);
-      this.hintTimer = null;
-    }
-    const pill = this.hintEl;
-    if (!pill) return;
-    this.hintEl = null;
-    try {
-      localStorage.setItem(SCROLL_HINT_KEY, "1");
-    } catch {
-    }
-    pill.classList.add("ke-is-out");
-    setTimeout(() => pill.remove(), 260);
-  }
-  destroy() {
-    var _a, _b, _c;
-    const tb = this.el;
-    if (this.tbRO) {
-      this.tbRO.disconnect();
-      this.tbRO = null;
-    }
-    if (this.hintTimer) {
-      clearTimeout(this.hintTimer);
-      this.hintTimer = null;
-    }
-    if (this.onTbScroll) tb.removeEventListener("scroll", this.onTbScroll);
-    if (this.onTbPointerDown) tb.removeEventListener("pointerdown", this.onTbPointerDown);
-    (_a = this.scrollFades) == null ? void 0 : _a.remove();
-    (_b = this.hintEl) == null ? void 0 : _b.remove();
-    this.scrollFades = null;
-    this.hintEl = null;
-    const host = (_c = this.editor) == null ? void 0 : _c.el;
-    if (host) {
-      host.classList.remove("ke-tb-scrollable", "ke-tb-can-l", "ke-tb-can-r", "ke-tb-dragging");
-      host.style.removeProperty("--ke-tb-h");
-    }
-    tb.innerHTML = "";
-    this.buttons.clear();
-  }
-}
-function formatLimit(bytes) {
-  if (!bytes) return "不限";
-  const mb = bytes / 1024 / 1024;
-  return mb >= 1 ? `${Math.round(mb)}MB` : `${Math.round(bytes / 1024)}KB`;
-}
-function getRange(root) {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return null;
-  const range = sel.getRangeAt(0);
-  if (!root.contains(range.commonAncestorContainer)) return null;
-  return range;
-}
-function caretOffset(root) {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return null;
-  const range = sel.getRangeAt(0);
-  if (!root.contains(range.startContainer)) return null;
-  let offset = 0;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      if (node === range.startContainer) return NodeFilter.FILTER_ACCEPT;
-      offset += node.textContent.length;
-      return NodeFilter.FILTER_SKIP;
-    }
-  });
-  const found = walker.nextNode();
-  if (!found) return range.startContainer === root ? 0 : null;
-  return offset + range.startOffset;
-}
-function setCaretOffset(root, offset) {
-  if (offset === null || offset === void 0) return;
-  const sel = window.getSelection();
-  let remaining = Math.max(0, offset);
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  let last = null;
-  while (node) {
-    const len = node.textContent.length;
-    if (remaining <= len) {
-      try {
-        sel.setBaseAndExtent(node, remaining, node, remaining);
-      } catch {
-      }
-      return;
-    }
-    remaining -= len;
-    last = node;
-    node = walker.nextNode();
-  }
-  if (last) {
-    try {
-      sel.setBaseAndExtent(last, last.textContent.length, last, last.textContent.length);
-    } catch {
-    }
-  }
-}
-function insertNode(root, node, { inline = false, selectAfter = true } = {}) {
-  root.focus();
-  const range = getRange(root);
-  if (!range) {
-    root.appendChild(node);
-    ensureEditableTail(root);
-    return node;
-  }
-  if (!range.collapsed) range.deleteContents();
-  if (inline) {
-    range.insertNode(node);
-  } else {
-    const block = closestBlock(range.startContainer, root);
-    if (!block || block === root) root.appendChild(node);
-    else block.after(node);
-  }
-  const after = document.createRange();
-  after.setStartAfter(node);
-  after.collapse(true);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(after);
-  ensureEditableTail(root);
-  if (selectAfter && sel.rangeCount === 0) root.focus();
-  return node;
-}
-function ensureEditableTail(root) {
-  const last = root.lastElementChild;
-  if (!last) {
-    root.appendChild(document.createElement("p"));
-    return;
-  }
-  if (/^(IMG|VIDEO|IFRAME)$/.test(last.tagName) || last.dataset.kmedia !== void 0) {
-    const p = document.createElement("p");
-    p.appendChild(document.createElement("br"));
-    root.appendChild(p);
-  }
-}
-function closestBlock(node, root) {
-  let current = node;
-  while (current && current !== root) {
-    if (current.nodeType === 1 && /^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|SECTION|TD|TH)$/.test(current.tagName)) return current;
-    current = current.parentNode;
-  }
-  return null;
-}
 const ALLOWED_TAGS = /* @__PURE__ */ new Set([
   "a",
   "abbr",
@@ -2241,6 +1821,1012 @@ function toPlainText(html) {
   doc.body.querySelectorAll("style,script").forEach((n) => n.remove());
   doc.body.innerHTML = doc.body.innerHTML.replace(/<\/(p|div|h[1-6]|li|blockquote|pre|tr)>/gi, "\n");
   return doc.body.textContent.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+const DEFAULT_TIMEOUT = 1e4;
+function pickArray(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== "object") return [];
+  for (const key of ["items", "list", "data", "rows", "records", "result"]) {
+    const value = raw[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") {
+      const nested = pickArray(value);
+      if (nested.length) return nested;
+    }
+  }
+  return [];
+}
+function first(entry, keys) {
+  for (const key of keys) {
+    const value = entry[key];
+    if (value !== void 0 && value !== null) return value;
+  }
+  return void 0;
+}
+function normalizeItem(entry, index) {
+  if (entry === void 0 || entry === null) return null;
+  if (typeof entry === "string" || typeof entry === "number") {
+    const text = String(entry);
+    return { value: text, label: text, desc: "", url: "", group: "", html: "", disabled: false, raw: entry };
+  }
+  if (typeof entry !== "object") return null;
+  const value = first(entry, ["value", "id", "key", "val", "code"]);
+  const label = first(entry, ["label", "text", "name", "title"]);
+  return {
+    value: value === void 0 ? String(index) : String(value),
+    label: label === void 0 || label === "" ? value === void 0 ? String(index) : String(value) : String(label),
+    desc: String(first(entry, ["desc", "description", "sub", "subtitle", "tip"]) ?? ""),
+    url: String(first(entry, ["url", "href", "link", "jumpUrl", "jump"]) ?? ""),
+    group: String(entry.group ?? ""),
+    html: String(entry.html ?? ""),
+    disabled: !!entry.disabled,
+    raw: entry
+  };
+}
+function normalizeItems(raw) {
+  return pickArray(raw).map(normalizeItem).filter(Boolean);
+}
+function normalizeCustomButton(spec) {
+  if (!spec || typeof spec !== "object") return null;
+  const name = String(spec.name || "").trim();
+  if (!name) return null;
+  return {
+    name,
+    type: spec.type === "button" ? "button" : "select",
+    title: spec.title || spec.text || name,
+    text: spec.text || "",
+    placeholder: spec.placeholder || spec.text || "请选择",
+    icon: spec.icon || "",
+    width: Number(spec.width) > 0 ? Number(spec.width) : 0,
+    searchable: !!spec.searchable,
+    note: spec.note ? String(spec.note) : "",
+    emptyText: spec.emptyText ? String(spec.emptyText) : "",
+    cache: spec.cache !== false,
+    keepValue: spec.keepValue !== false,
+    multiple: false,
+    options: spec.options ?? null,
+    load: typeof spec.load === "function" ? spec.load : null,
+    url: spec.url ? String(spec.url) : "",
+    fetchOptions: spec.fetchOptions && typeof spec.fetchOptions === "object" ? spec.fetchOptions : {},
+    pick: typeof spec.pick === "function" ? spec.pick : null,
+    link: spec.link ?? null,
+    insert: spec.insert === void 0 ? "auto" : spec.insert,
+    onSelect: typeof spec.onSelect === "function" ? spec.onSelect : null,
+    onClick: typeof spec.onClick === "function" ? spec.onClick : null,
+    active: typeof spec.active === "function" ? spec.active : null,
+    enabled: typeof spec.enabled === "function" ? spec.enabled : null
+  };
+}
+function normalizeCustomButtons(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(normalizeCustomButton).filter(Boolean);
+}
+function createButtonRuntime() {
+  return { items: null, loaded: false, loading: null, value: null, controller: null, error: "", gen: 0, external: false };
+}
+async function fetchItems(spec, editor, rt) {
+  if (spec.load) return normalizeItems(await spec.load(editor));
+  if (spec.url) return normalizeItems(await httpFetch(spec, editor, rt));
+  return normalizeItems(spec.options);
+}
+async function httpFetch(spec, editor, rt) {
+  var _a;
+  const cfg = spec.fetchOptions;
+  const impl = cfg.fetch || (typeof fetch === "function" ? fetch.bind(globalThis) : null);
+  if (!impl) throw new Error("当前环境无 fetch，请改用 load 函数提供数据");
+  (_a = rt.controller) == null ? void 0 : _a.abort();
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  rt.controller = controller;
+  const timeout = Number(cfg.timeout) > 0 ? Number(cfg.timeout) : DEFAULT_TIMEOUT;
+  const timer = setTimeout(() => controller == null ? void 0 : controller.abort(), timeout);
+  try {
+    const res = await impl(spec.url, {
+      method: cfg.method || "GET",
+      headers: cfg.headers,
+      body: cfg.body,
+      credentials: cfg.credentials,
+      signal: controller ? controller.signal : void 0
+    });
+    if (!res || res.ok === false) throw new Error(`接口返回 ${res && res.status ? res.status : "异常"}`);
+    const payload = cfg.parser ? await cfg.parser(res) : await res.json();
+    return spec.pick ? spec.pick(payload, editor) : payload;
+  } catch (error) {
+    if (error && error.name === "AbortError") throw new Error(`请求超时（${timeout}ms）或被取消`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    if (rt.controller === controller) rt.controller = null;
+  }
+}
+function loadItems(spec, editor, rt, { force = false } = {}) {
+  if (!force && rt.external && rt.items) return Promise.resolve(rt.items);
+  if (!force && spec.cache && rt.items) return Promise.resolve(rt.items);
+  if (!force && rt.loading) return rt.loading;
+  const gen = rt.gen;
+  const task = fetchItems(spec, editor, rt).then((items) => {
+    if (gen !== rt.gen) return rt.items;
+    rt.items = items;
+    rt.loaded = true;
+    rt.error = "";
+    return items;
+  }).catch((error) => {
+    if (gen !== rt.gen) return rt.items;
+    rt.error = error && error.message ? error.message : String(error);
+    throw error;
+  }).finally(() => {
+    if (rt.loading === task) rt.loading = null;
+  });
+  rt.loading = task;
+  return task;
+}
+function setRuntimeItems(rt, raw) {
+  rt.gen += 1;
+  rt.items = normalizeItems(raw);
+  rt.loaded = true;
+  rt.error = "";
+  rt.external = true;
+  abortRuntime(rt);
+  rt.loading = null;
+  return rt.items;
+}
+function abortRuntime(rt) {
+  var _a;
+  (_a = rt.controller) == null ? void 0 : _a.abort();
+  rt.controller = null;
+}
+function fill(template, item) {
+  return String(template).replace(/\{(\w+)\}/g, (match, key) => {
+    if (item[key] !== void 0 && item[key] !== null) return String(item[key]);
+    const fromRaw = item.raw && item.raw[key];
+    return fromRaw === void 0 || fromRaw === null ? match : String(fromRaw);
+  });
+}
+function pick$1(raw, item, editor) {
+  return typeof raw === "function" ? raw(item, editor) : raw;
+}
+function resolveLink(spec, item, editor) {
+  const conf = spec.link;
+  let raw = null;
+  if (typeof conf === "function") raw = conf(item, editor);
+  else if (typeof conf === "string") raw = { url: conf };
+  else if (conf && typeof conf === "object") raw = conf;
+  else if (conf === true || item.url) raw = { url: item.url };
+  if (!raw) return null;
+  if (typeof raw === "string") raw = { url: raw };
+  const url = normalizeUrl(fill(String(pick$1(raw.url, item, editor) ?? ""), item));
+  if (!url || !isSafeUrl(url)) return null;
+  const text = pick$1(raw.text, item, editor);
+  const title = pick$1(raw.title, item, editor);
+  const mode = raw.mode === "open" ? "open" : "insert";
+  const target = raw.target === "_self" || raw.target === false ? "_self" : "_blank";
+  return {
+    mode,
+    url,
+    text: text === void 0 || text === null || text === "" ? item.label : fill(String(text), item),
+    target,
+    title: title ? fill(String(title), item) : ""
+  };
+}
+function insertText(editor, text) {
+  editor.commands.insertHTML(escapeHtml(text));
+}
+async function applySelection(editor, spec, rt, item) {
+  editor.restoreSelection();
+  const link = resolveLink(spec, item, editor);
+  const ctx = {
+    editor,
+    item,
+    link,
+    insertLink: (override) => insertLink(editor, { ...link, ...override }),
+    insertHtml: (html) => editor.commands.insertHTML(String(html)),
+    insertText: (text) => insertText(editor, text),
+    open: (url, target) => openUrl(url || link && link.url, target || link && link.target)
+  };
+  let action = "none";
+  let handled = false;
+  if (spec.onSelect) {
+    handled = await spec.onSelect(item, ctx) === false;
+  }
+  if (!handled) action = doDefaultInsert(editor, spec, item, link);
+  if (spec.keepValue) rt.value = item;
+  const payload = { name: spec.name, item, link, action, editor };
+  editor.emit("customselect", payload);
+  return payload;
+}
+function doDefaultInsert(editor, spec, item, link) {
+  const mode = spec.insert;
+  if (mode === false || mode === "none") return "none";
+  if (link && link.mode === "open") {
+    openUrl(link.url, link.target);
+    return "open";
+  }
+  if (mode === "link" || mode === "auto" && link) {
+    if (!link) return "none";
+    insertLink(editor, link);
+    return "link";
+  }
+  if (mode === "html" || mode === "auto" && item.html) {
+    if (!item.html) return "none";
+    editor.commands.insertHTML(item.html);
+    return "html";
+  }
+  insertText(editor, item.label);
+  return "text";
+}
+function insertLink(editor, link) {
+  editor.commands.createLink({
+    url: link.url,
+    text: link.text,
+    target: link.target !== "_self"
+  });
+}
+function openUrl(url, target = "_blank") {
+  if (!url || !isSafeUrl(url)) return;
+  if (target === "_self") window.location.href = url;
+  else window.open(url, "_blank", "noopener,noreferrer");
+}
+const CARET = '<svg class="ke-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const SCROLL_HINT_KEY = "keditor.toolbarScrollHint";
+const SCROLL_HINT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7 4 12l4 5"/><path d="M16 7l4 5-4 5"/><path d="M4 12h16"/></svg>';
+const HEADINGS = [
+  { value: "p", label: "正文", desc: "默认段落 · 17px，正文内容都用它", sample: "正文示例文字", sampleClass: "s-body" },
+  { value: "h1", label: "标题一", desc: "大标题 · 22px 加粗，全文主标题（建议只用一次）", sample: "标题一示例", sampleClass: "s-h1" },
+  { value: "h2", label: "标题二", desc: "章节标题 · 20px 加粗，划分小节", sample: "标题二示例", sampleClass: "s-h2" },
+  { value: "h3", label: "标题三", desc: "小标题 · 18px 加粗，章节内的层级", sample: "标题三示例", sampleClass: "s-h3" }
+];
+const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
+const DEFAULT_TOOLBAR = [
+  "undo",
+  "redo",
+  "|",
+  "heading",
+  "fontsize",
+  "|",
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+  "|",
+  "foreColor",
+  "backColor",
+  "|",
+  "alignLeft",
+  "alignCenter",
+  "alignRight",
+  "alignJustify",
+  "|",
+  "ul",
+  "ol",
+  "quote",
+  "|",
+  "link",
+  "image",
+  "video",
+  "table",
+  "code",
+  "hr",
+  "clear",
+  ":tail",
+  "source",
+  "preview",
+  "fullscreen"
+];
+const ITEMS = {
+  undo: { icon: "undo", title: "撤销 (⌘/Ctrl+Z)", run: (e) => e.undo(), active: (s) => !!s.canUndo, enabled: (s) => s.canUndo },
+  redo: { icon: "redo", title: "重做 (⌘/Ctrl+Shift+Z)", run: (e) => e.redo(), active: (s) => !!s.canRedo, enabled: (s) => s.canRedo },
+  bold: { glyph: ["B", "ke-glyph"], title: "加粗 (⌘/Ctrl+B)", cmd: "bold", active: (s) => s.bold },
+  italic: { glyph: ["I", "ke-glyph ke-glyph-i"], title: "斜体 (⌘/Ctrl+I)", cmd: "italic", active: (s) => s.italic },
+  underline: { glyph: ["U", "ke-glyph ke-glyph-u"], title: "下划线 (⌘/Ctrl+U)", cmd: "underline", active: (s) => s.underline },
+  strike: { glyph: ["S", "ke-glyph ke-glyph-s"], title: "删除线", cmd: "strike", active: (s) => s.strikeThrough },
+  alignLeft: { icon: "alignLeft", title: "左对齐", run: (e) => e.commands.setAlign("left"), active: (s) => s.align === "left" },
+  alignCenter: { icon: "alignCenter", title: "居中", run: (e) => e.commands.setAlign("center"), active: (s) => s.align === "center" },
+  alignRight: { icon: "alignRight", title: "右对齐", run: (e) => e.commands.setAlign("right"), active: (s) => s.align === "right" },
+  alignJustify: { icon: "alignJustify", title: "两端对齐", run: (e) => e.commands.setAlign("justify"), active: (s) => s.align === "justify" },
+  ul: { icon: "ul", title: "无序列表", run: (e) => e.commands.toggleList("unordered"), active: (s) => s.ul },
+  ol: { icon: "ol", title: "有序列表", run: (e) => e.commands.toggleList("ordered"), active: (s) => s.ol },
+  quote: { icon: "quote", title: "引用", run: (e) => e.commands.toggleBlockquote(), active: (s) => s.block === "blockquote" },
+  link: { icon: "link", title: "插入链接", run: (e) => e.toolbar.openLink(), active: (s) => s.link, toggles: true },
+  image: { icon: "image", title: "图片（本地上传 / 网络链接）", run: (e) => e.toolbar.openMedia("image"), toggles: true },
+  video: { icon: "video", title: "视频（本地上传 / 网络链接，支持分片上传）", run: (e) => e.toolbar.openMedia("video"), toggles: true },
+  table: { icon: "table", title: "插入表格", run: (e) => e.toolbar.openTable(), toggles: true },
+  code: { icon: "code", title: "代码块", run: (e) => e.commands.insertCodeBlock() },
+  hr: { icon: "hr", title: "分割线", run: (e) => e.commands.insertDivider() },
+  clear: { icon: "clear", title: "清除格式", run: (e) => e.commands.clearFormat() },
+  source: { icon: "source", title: "查看 / 编辑 HTML 源码（⌘/Ctrl+Shift+K）", text: "源码", run: (e) => e.toggleSource(), active: (s) => s.source },
+  preview: { icon: "preview", title: "预览效果（手机 / 平板 / 电脑宽度）", text: "预览", run: (e) => e.togglePreview(), active: (s) => s.preview },
+  fullscreen: { icon: "expand", title: "全屏编辑", text: "全屏", run: (e) => e.toggleFullscreen(), active: (s) => s.fullscreen },
+  foreColor: { pop: "fore", title: "字体颜色", toggles: true, swatch: "fore" },
+  backColor: { pop: "back", title: "背景高亮色", toggles: true, swatch: "back" }
+};
+class Toolbar {
+  constructor(editor, items = DEFAULT_TOOLBAR, customButtons = []) {
+    this.editor = editor;
+    this.buttons = /* @__PURE__ */ new Map();
+    this.custom = /* @__PURE__ */ new Map();
+    this.colorState = { foreColor: "#3f3f3f", backColor: "#f6c344" };
+    this.recent = { foreColor: [], backColor: [] };
+    this.el = editor.tbEl;
+    for (const spec of customButtons) this.registerCustom(spec);
+    this.build(items);
+    this.setupScrollHints();
+  }
+  build(items) {
+    const group = h("div.ke-tb-group");
+    this.el.appendChild(group);
+    this.groupEl = group;
+    this.tailEl = null;
+    const target = () => this.tailEl || group;
+    for (const key of items) {
+      if (key === "|") {
+        target().appendChild(h("span.ke-tb-sep"));
+        continue;
+      }
+      if (key === ":tail") {
+        this.tailEl = h("div.ke-tb-tail");
+        this.el.appendChild(this.tailEl);
+        continue;
+      }
+      if (this.custom.has(key)) {
+        const entry = this.custom.get(key);
+        entry.button = this.buildCustomButton(entry);
+        target().appendChild(entry.button);
+        continue;
+      }
+      if (key === "heading") {
+        target().appendChild(this.buildHeading());
+        continue;
+      }
+      if (key === "fontsize") {
+        target().appendChild(this.buildFontSize());
+        continue;
+      }
+      const spec = ITEMS[key];
+      if (!spec) continue;
+      target().appendChild(this.buildButton(key, spec));
+    }
+    for (const [name, entry] of this.custom) {
+      if (!entry.button) {
+        entry.button = this.buildCustomButton(entry);
+        target().appendChild(entry.button);
+      }
+      entry.button.dataset.kCustom = name;
+    }
+  }
+  buildButton(name, spec) {
+    const button = h("button.ke-btn", {
+      type: "button",
+      title: spec.title,
+      "data-k-item": name,
+      onclick: (event) => {
+        var _a;
+        event.preventDefault();
+        if (spec.pop) this.toggleColor(name, button);
+        else if (spec.cmd) this.editor.commands.toggleMark(spec.cmd);
+        else (_a = spec.run) == null ? void 0 : _a.call(spec, this.editor);
+        if (!spec.toggles) this.editor.popover.close();
+      }
+    });
+    if (spec.icon) button.innerHTML = icon(spec.icon);
+    if (spec.text) button.appendChild(h("span.ke-btn-text", { text: spec.text }));
+    if (spec.glyph) {
+      const [text, cls] = spec.glyph;
+      button.appendChild(h("span", { class: cls, text }));
+    }
+    if (spec.swatch) {
+      const color = spec.swatch === "fore" ? this.colorState.foreColor : this.colorState.backColor;
+      const face = h("span", { class: spec.swatch === "fore" ? "ke-glyph ke-glyph-a" : "ke-glyph ke-glyph-a ke-glyph-hl" });
+      face.appendChild(h("span", { text: "A" }));
+      button.appendChild(face);
+      if (spec.swatch === "fore") button.appendChild(h("span", { class: "ke-dot" }));
+      this.paintButton(button, spec.swatch, color);
+      button.dataset.kPop = spec.swatch === "fore" ? "foreColor" : "backColor";
+    }
+    if (spec.toggles && !spec.swatch) button.dataset.kPop = name;
+    this.buttons.set(name, button);
+    return button;
+  }
+  paintButton(button, kind, color) {
+    if (!button || !color) return;
+    button.style.setProperty(kind === "fore" ? "--ke-fore" : "--ke-back", color);
+  }
+  /* ---------------- 下拉面板 ---------------- */
+  openPop(anchor, builder, options = {}) {
+    this.editor.saveSelection();
+    this.editor.popover.open(anchor, builder, {
+      align: "start",
+      ...options,
+      onClose: () => {
+        var _a;
+        anchor.classList.remove("ke-is-open");
+        (_a = options.onClose) == null ? void 0 : _a.call(options);
+      }
+    });
+    anchor.classList.add("ke-is-open");
+  }
+  /** 同一个按钮再次点击 = 关闭；颜色按钮点击直接展开面板 */
+  togglePop(name, button, builder, options = {}) {
+    const pop = this.editor.popover;
+    if (pop.isOpen && pop.anchor === button) {
+      pop.close();
+      return;
+    }
+    this.openPop(button, builder, options);
+  }
+  buildHeading() {
+    const current = HEADINGS[0];
+    const button = h("button.ke-btn.ke-btn-label", {
+      type: "button",
+      title: "段落样式：正文 / 标题一 / 标题二 / 标题三",
+      "data-k-item": "heading",
+      dataset: { kPop: "heading" },
+      onclick: (event) => {
+        event.preventDefault();
+        this.togglePop("heading", button, () => headingPanel(HEADINGS, {
+          value: this.editor.getState().block,
+          onPick: (value) => {
+            this.editor.restoreSelection();
+            this.editor.commands.setHeading(value);
+            this.editor.popover.close();
+            this.editor.refresh();
+          }
+        }));
+      }
+    });
+    button.innerHTML = `<span class="ke-btn-text">${current.label}</span>${CARET}`;
+    this.headingEl = button;
+    this.buttons.set("heading", button);
+    return button;
+  }
+  buildFontSize() {
+    const button = h("button.ke-btn.ke-btn-label", {
+      type: "button",
+      title: "字号",
+      "data-k-item": "fontsize",
+      dataset: { kPop: "fontsize" },
+      onclick: (event) => {
+        event.preventDefault();
+        this.togglePop("fontsize", button, () => fontSizePanel(FONT_SIZES, {
+          value: this.editor.getState().fontSize,
+          onPick: (size) => {
+            this.editor.restoreSelection();
+            this.editor.commands.setFontSize(Number(size));
+            this.editor.popover.close();
+            this.editor.refresh();
+          }
+        }));
+      }
+    });
+    button.innerHTML = `<span class="ke-btn-text">字号</span>${CARET}`;
+    this.fontSizeEl = button;
+    this.buttons.set("fontsize", button);
+    return button;
+  }
+  /* ---------------- 自定义按钮 ---------------- */
+  /** 登记一个自定义按钮规格；统一在此规范化，保证配置与 addButton 两条路径行为一致 */
+  registerCustom(raw) {
+    const spec = normalizeCustomButton(raw);
+    if (!spec) return null;
+    const prev = this.custom.get(spec.name);
+    const entry = { spec, rt: prev ? prev.rt : createButtonRuntime(), button: prev ? prev.button : null };
+    this.custom.set(spec.name, entry);
+    return entry;
+  }
+  buildCustomButton(entry) {
+    const { spec } = entry;
+    const isSelect = spec.type === "select";
+    const button = h("button.ke-btn", {
+      type: "button",
+      class: isSelect ? "ke-btn-label ke-btn-custom" : "ke-btn-custom",
+      title: spec.title,
+      "data-k-item": spec.name,
+      dataset: { kPop: spec.name },
+      onclick: (event) => {
+        event.preventDefault();
+        if (isSelect) this.openCustom(spec.name);
+        else this.runCustomButton(spec);
+      }
+    });
+    if (spec.icon) button.innerHTML = /</.test(spec.icon) ? spec.icon : icon(spec.icon);
+    if (isSelect) {
+      button.appendChild(h("span.ke-btn-text", { text: spec.text || spec.placeholder }));
+      button.insertAdjacentHTML("beforeend", CARET);
+    } else if (spec.text) {
+      button.appendChild(h("span.ke-btn-text", { text: spec.text }));
+    }
+    this.syncCustomLabel(spec.name, button);
+    return button;
+  }
+  /** 按钮文案跟随当前选中项（与段落样式 / 字号按钮一致） */
+  syncCustomLabel(name, node) {
+    const entry = this.custom.get(name);
+    const button = node || (entry == null ? void 0 : entry.button);
+    if (!entry || !button) return;
+    const { spec, rt } = entry;
+    if (spec.type !== "select") return;
+    const label = button.querySelector(".ke-btn-text");
+    if (!label) return;
+    const picked = rt.value;
+    label.textContent = picked ? picked.label : spec.text || spec.placeholder;
+    button.title = picked ? `${spec.title}：${picked.label}` : spec.title;
+    button.classList.toggle("ke-has-value", !!picked);
+  }
+  /** 打开下拉面板：数据异步加载，带缓存 / 重试 / 搜索 */
+  openCustom(name) {
+    const entry = this.custom.get(name);
+    if (!entry) return;
+    this.revealButton(entry.button);
+    const { spec, rt } = entry;
+    const remote = !!(spec.load || spec.url);
+    const fetcher = ({ force } = {}) => loadItems(spec, this.editor, rt, { force });
+    this.togglePop(name, entry.button, () => selectPanel({
+      title: spec.title,
+      note: spec.note || "",
+      searchable: spec.searchable,
+      width: spec.width,
+      remote,
+      value: rt.value ? rt.value.value : "",
+      emptyText: spec.emptyText,
+      load: fetcher,
+      reload: fetcher,
+      linkOf: (item) => resolveLink(spec, item, this.editor),
+      onPick: (item) => this.pickCustom(name, item)
+    }));
+  }
+  async pickCustom(name, item) {
+    const entry = this.custom.get(name);
+    if (!entry) return;
+    this.editor.popover.close();
+    try {
+      await applySelection(this.editor, entry.spec, entry.rt, item);
+    } catch (error) {
+      this.editor.reportError("custombutton", error);
+    }
+    this.syncCustomLabel(name);
+    this.editor.refresh();
+  }
+  /** type:'button' 的简单自定义按钮 */
+  async runCustomButton(spec) {
+    this.editor.popover.close();
+    try {
+      if (spec.onClick) await spec.onClick({ editor: this.editor, name: spec.name });
+      this.editor.emit("customclick", { name: spec.name, editor: this.editor });
+    } catch (error) {
+      this.editor.reportError("custombutton", error);
+    }
+    this.editor.refresh();
+  }
+  /** 运行时新增自定义按钮；at 为 toolbar 内插入位置（默认追加到主分组末尾） */
+  addButton(spec, { at } = {}) {
+    var _a;
+    const entry = this.registerCustom(spec);
+    if (!entry) return null;
+    if (entry.button) entry.button.remove();
+    entry.button = this.buildCustomButton(entry);
+    const host = this.tailEl || this.groupEl;
+    if (!host) return entry.button;
+    if (typeof at === "number" && at >= 0) {
+      const ref = host.children[Math.min(at, host.children.length)];
+      host.insertBefore(entry.button, ref || null);
+    } else {
+      const sep2 = h("span.ke-tb-sep");
+      host.appendChild(sep2);
+      host.appendChild(entry.button);
+    }
+    this.revealButton(entry.button);
+    (_a = this.syncScrollHints) == null ? void 0 : _a.call(this);
+    return entry.button;
+  }
+  /** 工具栏溢出时把按钮滚进可视区（避开 sticky 尾栏的遮挡） */
+  revealButton(button) {
+    const tb = this.el;
+    if (!tb || !button || !button.isConnected) return;
+    const max = tb.scrollWidth - tb.clientWidth;
+    if (max <= 1) return;
+    const tailW = this.tailEl ? this.tailEl.offsetWidth : 0;
+    const left = button.offsetLeft;
+    const right = left + button.offsetWidth;
+    const viewR = tb.scrollLeft + tb.clientWidth - tailW;
+    if (right > viewR - 4) tb.scrollLeft = Math.min(max, right - tb.clientWidth + tailW + 10);
+    else if (left < tb.scrollLeft + 4) tb.scrollLeft = Math.max(0, left - 10);
+  }
+  /** 移除自定义按钮并中断其未完成的请求 */
+  removeButton(name) {
+    var _a, _b;
+    const entry = this.custom.get(name);
+    if (!entry) return false;
+    abortRuntime(entry.rt);
+    if (this.editor.popover.anchor === entry.button) this.editor.popover.close();
+    (_a = entry.button) == null ? void 0 : _a.remove();
+    this.buttons.delete(name);
+    this.custom.delete(name);
+    (_b = this.syncScrollHints) == null ? void 0 : _b.call(this);
+    return true;
+  }
+  /** 外部灌入下拉数据（接口在编辑器之外请求时用），并刷新已打开的面板 */
+  setButtonOptions(name, items) {
+    const entry = this.custom.get(name);
+    if (!entry) return null;
+    const list = setRuntimeItems(entry.rt, items);
+    if (this.editor.popover.isOpen && this.editor.popover.anchor === entry.button) {
+      this.editor.popover.close();
+      this.openCustom(name);
+    }
+    return list;
+  }
+  /** 读取按钮当前选中项 */
+  getButtonValue(name) {
+    const entry = this.custom.get(name);
+    return entry ? entry.rt.value : null;
+  }
+  setButtonValue(name, value) {
+    const entry = this.custom.get(name);
+    if (!entry) return null;
+    const items = entry.rt.items || [];
+    const match = items.find((item) => String(item.value) === String(value)) || null;
+    entry.rt.value = match;
+    this.syncCustomLabel(name);
+    return match;
+  }
+  toggleColor(name, button) {
+    const kind = name === "foreColor" ? "fore" : "back";
+    this.togglePop(
+      name,
+      button,
+      () => colorPanel({
+        title: kind === "fore" ? "字体颜色" : "背景高亮色",
+        kind,
+        value: this.colorState[name],
+        recents: this.recent[name],
+        onPick: (color) => this.applyColor(name, kind, color, button),
+        onClear: () => this.applyColor(name, kind, null, button)
+      }),
+      {
+        onClose: () => button.classList.remove("ke-is-active")
+      }
+    );
+  }
+  applyColor(name, kind, color, button) {
+    this.editor.restoreSelection();
+    if (color) {
+      this.colorState[name] = color;
+      this.recent[name] = [color, ...this.recent[name].filter((x) => x.toLowerCase() !== color.toLowerCase())].slice(0, 8);
+      this.paintButton(button, kind, color);
+    }
+    this.editor.commands.setColor(kind, color);
+    this.editor.popover.close();
+  }
+  openTable() {
+    const button = this.buttons.get("table");
+    this.togglePop("table", button, () => tablePanel((cols, rows) => {
+      this.editor.restoreSelection();
+      this.editor.commands.insertTable(cols, rows);
+      this.editor.popover.close();
+    }));
+  }
+  openLink() {
+    const button = this.buttons.get("link");
+    const state = this.editor.getState();
+    const existing = state.linkUrl;
+    this.togglePop("link", button, () => linkPanel({
+      url: existing || "",
+      text: existing ? "" : state.selectionText || "",
+      target: existing ? state.linkTarget : true,
+      onCancel: () => this.editor.popover.close(),
+      onRemove: existing ? () => {
+        this.editor.restoreSelection();
+        this.editor.commands.removeLink();
+        this.editor.popover.close();
+      } : null,
+      onSubmit: ({ url, text, target }) => {
+        this.editor.restoreSelection();
+        this.editor.commands.createLink({ url: normalizeUrl(url), text, target });
+        this.editor.popover.close();
+      }
+    }));
+  }
+  /** 图片 / 视频：本地上传 + 网络链接输入 */
+  openMedia(kind) {
+    const button = this.buttons.get(kind);
+    const editor = this.editor;
+    const options = editor.options;
+    this.togglePop(kind, button, () => mediaPanel(kind, {
+      multiple: kind === "image",
+      maxText: `${kind === "image" ? "图片" : "视频"}上限 ${formatLimit(kind === "image" ? options.maxImageSize : options.maxVideoSize)}`,
+      hint: kind === "image" ? "支持 PNG / JPG / GIF / WebP / SVG" : "支持 MP4 / MOV / WebM，大文件自动分片",
+      onFiles: (files) => {
+        editor.popover.close();
+        if (files && files.length) editor.media.addFiles([...files]);
+        else editor.media.pickFiles(kind);
+      },
+      onUrl: ({ url, name }) => {
+        editor.popover.close();
+        editor.restoreSelection();
+        editor.media.insertFromUrl(kind, url, name);
+      }
+    }));
+  }
+  /** 根据编辑器状态同步按钮高亮 / 下拉值 / 禁用 */
+  refresh(state) {
+    var _a;
+    for (const [name, button] of this.buttons) {
+      const spec = ITEMS[name];
+      if (!spec) continue;
+      const active = ((_a = spec.active) == null ? void 0 : _a.call(spec, state)) || false;
+      if (button.dataset.kPop || !spec.pop) button.classList.toggle("ke-is-active", active);
+      if (spec.enabled) button.disabled = !spec.enabled(state);
+    }
+    for (const [name, entry] of this.custom) {
+      const { spec, button } = entry;
+      if (!button) continue;
+      if (spec.active) button.classList.toggle("ke-is-active", !!spec.active(state, this.editor));
+      if (spec.enabled) button.disabled = !spec.enabled(state, this.editor);
+      if (spec.type === "select") this.syncCustomLabel(name);
+    }
+    if (this.headingEl) {
+      const match = HEADINGS.find((x) => x.value === state.block);
+      const label = this.headingEl.querySelector(".ke-btn-text");
+      if (label) label.textContent = match ? match.label : "正文";
+      this.headingEl.title = match ? `${match.label}：${match.desc}` : "段落样式";
+    }
+    if (this.fontSizeEl) {
+      const label = this.fontSizeEl.querySelector(".ke-btn-text");
+      if (label) label.textContent = state.fontSize ? `${state.fontSize}px` : "字号";
+    }
+    if (state.linkUrl) {
+      const btn2 = this.buttons.get("link");
+      btn2 == null ? void 0 : btn2.classList.add("ke-is-active");
+    }
+  }
+  /* ---------------- 可滑动提示 ---------------- */
+  /**
+   * 工具栏溢出时给出四重可发现性提示：
+   * 常显滚动条（CSS）、右侧被遮工具的动态阴影、左侧渐隐、鼠标拖拽，
+   * 外加首次加载的引导气泡。
+   */
+  setupScrollHints() {
+    const tb = this.el;
+    const host = this.editor.el;
+    if (!tb.isConnected) return;
+    this.scrollFades = h("div.ke-tb-fades", { "aria-hidden": "true" }, [h("i.ke-tb-fade ke-tb-fade-l")]);
+    tb.insertAdjacentElement("afterend", this.scrollFades);
+    this.syncScrollHints = () => {
+      if (!tb.isConnected || !host.isConnected) return;
+      const max = tb.scrollWidth - tb.clientWidth;
+      const overflow = max > 1;
+      const left = tb.scrollLeft;
+      host.classList.toggle("ke-tb-scrollable", overflow);
+      host.classList.toggle("ke-tb-can-l", overflow && left > 1);
+      host.classList.toggle("ke-tb-can-r", overflow && left < max - 1);
+      host.style.setProperty("--ke-tb-h", `${tb.offsetHeight}px`);
+      if (overflow && !this.hintSettled) this.showScrollHint();
+    };
+    this.onTbScroll = () => {
+      this.syncScrollHints();
+      this.hideScrollHint();
+    };
+    tb.addEventListener("scroll", this.onTbScroll, { passive: true });
+    if (typeof ResizeObserver !== "undefined") {
+      this.tbRO = new ResizeObserver(() => this.syncScrollHints());
+      this.tbRO.observe(tb);
+    }
+    this.onTbPointerDown = (event) => {
+      this.hideScrollHint();
+      this.startDragScroll(event);
+    };
+    tb.addEventListener("pointerdown", this.onTbPointerDown);
+    requestAnimationFrame(this.syncScrollHints);
+  }
+  /** 鼠标按住拖动平移工具栏（触屏已有原生滑动，不介入） */
+  startDragScroll(event) {
+    const tb = this.el;
+    const host = this.editor.el;
+    if (event.button !== 0 || event.pointerType !== "mouse") return;
+    if (tb.scrollWidth <= tb.clientWidth + 1) return;
+    if (event.target.closest("input, textarea, select")) return;
+    const startX = event.clientX;
+    const startLeft = tb.scrollLeft;
+    let dragging = false;
+    const move = (ev) => {
+      var _a;
+      const dx = ev.clientX - startX;
+      if (!dragging) {
+        if (Math.abs(dx) < 5) return;
+        dragging = true;
+        try {
+          tb.setPointerCapture(event.pointerId);
+        } catch {
+        }
+        host.classList.add("ke-tb-dragging");
+        (_a = this.editor.popover) == null ? void 0 : _a.close();
+      }
+      ev.preventDefault();
+      tb.scrollLeft = startLeft - dx;
+    };
+    const up = () => {
+      tb.removeEventListener("pointermove", move);
+      tb.removeEventListener("pointerup", up);
+      tb.removeEventListener("pointercancel", up);
+      host.classList.remove("ke-tb-dragging");
+      if (!dragging) return;
+      try {
+        tb.releasePointerCapture(event.pointerId);
+      } catch {
+      }
+      const stop = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        release();
+      };
+      const release = () => {
+        clearTimeout(fallback);
+        tb.removeEventListener("click", stop, true);
+      };
+      const fallback = setTimeout(release, 400);
+      tb.addEventListener("click", stop, true);
+    };
+    tb.addEventListener("pointermove", move);
+    tb.addEventListener("pointerup", up);
+    tb.addEventListener("pointercancel", up);
+  }
+  showScrollHint() {
+    this.hintSettled = true;
+    let seen = false;
+    try {
+      seen = localStorage.getItem(SCROLL_HINT_KEY) === "1";
+    } catch {
+    }
+    if (seen) return;
+    this.hintEl = h("div.ke-tb-hint", { "aria-hidden": "true" }, [
+      h("span.ke-tb-hint-ico", { html: SCROLL_HINT_ICON }),
+      h("span", { text: "工具栏可左右滑动" })
+    ]);
+    this.editor.el.appendChild(this.hintEl);
+    this.hintTimer = setTimeout(() => this.hideScrollHint(), 3800);
+  }
+  hideScrollHint() {
+    if (this.hintTimer) {
+      clearTimeout(this.hintTimer);
+      this.hintTimer = null;
+    }
+    const pill = this.hintEl;
+    if (!pill) return;
+    this.hintEl = null;
+    try {
+      localStorage.setItem(SCROLL_HINT_KEY, "1");
+    } catch {
+    }
+    pill.classList.add("ke-is-out");
+    setTimeout(() => pill.remove(), 260);
+  }
+  destroy() {
+    var _a, _b, _c;
+    const tb = this.el;
+    if (this.tbRO) {
+      this.tbRO.disconnect();
+      this.tbRO = null;
+    }
+    if (this.hintTimer) {
+      clearTimeout(this.hintTimer);
+      this.hintTimer = null;
+    }
+    if (this.onTbScroll) tb.removeEventListener("scroll", this.onTbScroll);
+    if (this.onTbPointerDown) tb.removeEventListener("pointerdown", this.onTbPointerDown);
+    for (const entry of this.custom.values()) abortRuntime(entry.rt);
+    this.custom.clear();
+    (_a = this.scrollFades) == null ? void 0 : _a.remove();
+    (_b = this.hintEl) == null ? void 0 : _b.remove();
+    this.scrollFades = null;
+    this.hintEl = null;
+    const host = (_c = this.editor) == null ? void 0 : _c.el;
+    if (host) {
+      host.classList.remove("ke-tb-scrollable", "ke-tb-can-l", "ke-tb-can-r", "ke-tb-dragging");
+      host.style.removeProperty("--ke-tb-h");
+    }
+    tb.innerHTML = "";
+    this.buttons.clear();
+  }
+}
+function formatLimit(bytes) {
+  if (!bytes) return "不限";
+  const mb = bytes / 1024 / 1024;
+  return mb >= 1 ? `${Math.round(mb)}MB` : `${Math.round(bytes / 1024)}KB`;
+}
+function getRange(root) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return null;
+  return range;
+}
+function caretOffset(root) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.startContainer)) return null;
+  let offset = 0;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (node === range.startContainer) return NodeFilter.FILTER_ACCEPT;
+      offset += node.textContent.length;
+      return NodeFilter.FILTER_SKIP;
+    }
+  });
+  const found = walker.nextNode();
+  if (!found) return range.startContainer === root ? 0 : null;
+  return offset + range.startOffset;
+}
+function setCaretOffset(root, offset) {
+  if (offset === null || offset === void 0) return;
+  const sel = window.getSelection();
+  let remaining = Math.max(0, offset);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let last = null;
+  while (node) {
+    const len = node.textContent.length;
+    if (remaining <= len) {
+      try {
+        sel.setBaseAndExtent(node, remaining, node, remaining);
+      } catch {
+      }
+      return;
+    }
+    remaining -= len;
+    last = node;
+    node = walker.nextNode();
+  }
+  if (last) {
+    try {
+      sel.setBaseAndExtent(last, last.textContent.length, last, last.textContent.length);
+    } catch {
+    }
+  }
+}
+function insertNode(root, node, { inline = false, selectAfter = true } = {}) {
+  root.focus();
+  const range = getRange(root);
+  if (!range) {
+    root.appendChild(node);
+    ensureEditableTail(root);
+    return node;
+  }
+  if (!range.collapsed) range.deleteContents();
+  if (inline) {
+    range.insertNode(node);
+  } else {
+    const block = closestBlock(range.startContainer, root);
+    if (!block || block === root) root.appendChild(node);
+    else block.after(node);
+  }
+  const after = document.createRange();
+  after.setStartAfter(node);
+  after.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(after);
+  ensureEditableTail(root);
+  if (selectAfter && sel.rangeCount === 0) root.focus();
+  return node;
+}
+function ensureEditableTail(root) {
+  const last = root.lastElementChild;
+  if (!last) {
+    root.appendChild(document.createElement("p"));
+    return;
+  }
+  if (/^(IMG|VIDEO|IFRAME)$/.test(last.tagName) || last.dataset.kmedia !== void 0) {
+    const p = document.createElement("p");
+    p.appendChild(document.createElement("br"));
+    root.appendChild(p);
+  }
+}
+function closestBlock(node, root) {
+  let current = node;
+  while (current && current !== root) {
+    if (current.nodeType === 1 && /^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|SECTION|TD|TH)$/.test(current.tagName)) return current;
+    current = current.parentNode;
+  }
+  return null;
 }
 class Commands {
   constructor(editor) {
@@ -3396,6 +3982,8 @@ const defaults = {
   primaryColor: "#07c160",
   paperWidth: 677,
   toolbar: DEFAULT_TOOLBAR,
+  /** 自定义工具栏按钮（下拉选择，数据可静态配置或从接口读取） */
+  customButtons: [],
   hideToolbar: false,
   hideStatusbar: false,
   readOnly: false,
@@ -3430,6 +4018,7 @@ class KEditor {
     this.options = mergeOptions(options);
     this.id = `ke-${instanceSeq += 1}`;
     this.el = resolveTarget(target, this.id);
+    this.el.__keditor__ = this;
     const hostHTML = this.el.innerHTML;
     this.emitters = /* @__PURE__ */ new Map();
     this.domListeners = [];
@@ -3445,7 +4034,7 @@ class KEditor {
     this.uploader = createUploader(this.options.uploader, this.options.upload);
     this.media = createMedia(this);
     this.history = new History(this.root, { limit: this.options.historyLimit });
-    this.toolbar = new Toolbar(this, this.options.toolbar);
+    this.toolbar = new Toolbar(this, this.options.toolbar, this.options.customButtons);
     this.source = new SourcePanel(this);
     this.previewPanel = new PreviewOverlay(this);
     this.bubble = new MediaBubble(this);
@@ -3753,8 +4342,8 @@ class KEditor {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || !this.root.contains(sel.anchorNode)) {
       const range = document.createRange();
-      const first = this.root.firstElementChild || this.root;
-      range.selectNodeContents(first);
+      const first2 = this.root.firstElementChild || this.root;
+      range.selectNodeContents(first2);
       range.collapse(false);
       sel.removeAllRanges();
       sel.addRange(range);
@@ -3825,6 +4414,36 @@ class KEditor {
   /** 取消全部进行中的上传 */
   cancelUploads() {
     this.media.cancelAll();
+    return this;
+  }
+  /* ------------------------------ 自定义工具栏按钮 ------------------------------ */
+  /** 运行时新增自定义按钮（下拉选择 / 普通按钮），返回按钮 DOM */
+  addButton(spec, options) {
+    return this.toolbar.addButton(spec, options);
+  }
+  /** 移除自定义按钮，并中断其未完成的接口请求 */
+  removeButton(name) {
+    return this.toolbar.removeButton(name);
+  }
+  /** 外部灌入下拉数据（接口在编辑器之外请求时使用），返回规范化后的列表 */
+  setButtonOptions(name, items) {
+    return this.toolbar.setButtonOptions(name, items);
+  }
+  /** 读取 / 设置下拉按钮当前选中项 */
+  getButtonValue(name) {
+    return this.toolbar.getButtonValue(name);
+  }
+  setButtonValue(name, value) {
+    return this.toolbar.setButtonValue(name, value);
+  }
+  /** 统一错误上报：toast 提示 + emit('error') + options.onError */
+  reportError(type, error) {
+    var _a, _b, _c;
+    const message = error && error.message ? error.message : String(error);
+    const payload = { type, error: error instanceof Error ? error : new Error(message), message };
+    (_a = this.toast) == null ? void 0 : _a.error(message);
+    this.emit("error", payload);
+    (_c = (_b = this.options).onError) == null ? void 0 : _c.call(_b, payload);
     return this;
   }
   /* ------------------------------ 面板 ------------------------------ */
@@ -3932,6 +4551,7 @@ class KEditor {
     this.scrollEl.removeEventListener("scroll", this.scrollHandler);
     window.removeEventListener("resize", this.scrollHandler);
     if (this.fullscreen) document.body.style.overflow = "";
+    if (this.el.__keditor__ === this) this.el.__keditor__ = null;
     this.el.innerHTML = "";
     this.el.classList.remove("ke", "ke-is-fullscreen", "ke-is-readonly");
     this.el.removeAttribute("style");
@@ -3984,11 +4604,20 @@ function mergeOptions(options) {
   out.image = { ...defaults.image, ...options.image || {} };
   out.paste = { ...defaults.paste, ...options.paste || {} };
   out.upload = { ...defaults.upload, ...options.upload || {} };
+  out.customButtons = normalizeCustomButtons(options.customButtons);
   if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar;
   if (options.toolbar === false) out.toolbar = [];
   if (options.toolbar === true) out.toolbar = DEFAULT_TOOLBAR;
+  if (out.customButtons.length && options.toolbar === void 0) {
+    out.toolbar = appendCustomNames(DEFAULT_TOOLBAR, out.customButtons.map((spec) => spec.name));
+  }
   out.height = clamp$1(out.height ?? 460, 0, 4e3);
   return out;
+}
+function appendCustomNames(items, names) {
+  const at = items.indexOf(":tail");
+  const insert = ["|", ...names];
+  return at < 0 ? [...items, ...insert] : [...items.slice(0, at), ...insert, ...items.slice(at)];
 }
 function buildStatusbar(editor) {
   const chars = h("b", { text: "0" });
@@ -4081,7 +4710,7 @@ function previewHtml(html) {
   });
   return root.innerHTML;
 }
-const version = "1.0.0";
+const version = "1.0.1";
 function create(target, options = {}) {
   return new KEditor(target, options);
 }
@@ -4109,6 +4738,8 @@ export {
   maybeCompress,
   mockAdapter,
   mount,
+  normalizeCustomButtons,
+  normalizeItems,
   replace,
   sanitizeHtml,
   simpleAdapter,

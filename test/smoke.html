@@ -546,6 +546,333 @@
           prioEd.destroy()
         }
 
+        /* ---------------- 自定义工具栏按钮 ---------------- */
+        const errorsBefore = jsErrors.length
+        const offscreen = (w = 820) => {
+          const el = document.createElement('div')
+          el.style.cssText = `position:fixed;left:-9999px;top:0;width:${w}px`
+          document.body.appendChild(el)
+          return el
+        }
+
+        // A. 静态配置 + 链接模板
+        {
+          const hostA = offscreen()
+          const edA = KEditor.create(hostA, {
+            value: '<p>正文</p>',
+            customButtons: [{
+              name: 'tpl',
+              text: '模板',
+              title: '插入模板',
+              searchable: true,
+              options: [
+                { value: 'a', label: '开场白', desc: '常用开头', url: 'https://example.com/a' },
+                { value: 'b', label: '结束语', group: '结尾' },
+                { value: 'evil', label: '危险项', url: 'javascript:alert(1)' },
+              ],
+              link: { url: 'https://mp.example.com/tpl/{value}?from=ke', text: '【{label}】' },
+            }],
+          })
+          await sleep(30)
+          const btnA = hostA.querySelector('[data-k-item="tpl"]')
+          check('自定义下拉按钮已渲染', !!btnA && btnA.classList.contains('ke-btn-custom'), btnA ? btnA.className : '未找到')
+          check(
+            '未配置 toolbar 时自动追加到默认工具栏',
+            !!btnA && !!btnA.closest('.ke-tb-group') && !btnA.closest('.ke-tb-tail'),
+            btnA ? btnA.parentElement.className : '',
+          )
+          check('按钮带文案与下拉箭头', /模板/.test(btnA.textContent) && !!btnA.querySelector('.ke-caret'), btnA.textContent.trim())
+
+          let picked = null
+          edA.on('customselect', (payload) => { picked = payload })
+
+          edA.toolbar.openCustom('tpl')
+          await sleep(40)
+          const rows = () => [...hostA.querySelectorAll('.ke-sel-row')]
+          check('面板列出静态选项', rows().length === 3, `rows=${rows().length}`)
+          check('选项显示描述', /常用开头/.test(hostA.querySelector('.ke-sel-desc')?.textContent || ''), '')
+          check(
+            '选项提示将插入的链接域名',
+            /mp\.example\.com/.test(hostA.querySelector('.ke-sel-link i')?.textContent || ''),
+            hostA.querySelector('.ke-sel-link i')?.textContent || '无链接提示',
+          )
+
+          const search = hostA.querySelector('.ke-sel-search')
+          check('searchable 时渲染搜索框', !!search, '')
+          search.value = '结束'
+          search.dispatchEvent(new Event('input', { bubbles: true }))
+          await sleep(20)
+          check('搜索过滤生效', rows().length === 1 && /结束语/.test(rows()[0].textContent), `rows=${rows().length}`)
+          search.value = ''
+          search.dispatchEvent(new Event('input', { bubbles: true }))
+          await sleep(20)
+
+          rows()[0].click()
+          await sleep(60)
+          const htmlA = edA.getHTML()
+          check(
+            '选中后按模板插入跳转链接',
+            /<a[^>]+href="https:\/\/mp\.example\.com\/tpl\/a\?from=ke"[^>]*>【开场白】<\/a>/.test(htmlA),
+            htmlA.slice(0, 160),
+          )
+          check('链接默认新窗口打开且带 noopener', /target="_blank"/.test(htmlA) && /rel="noopener noreferrer"/.test(htmlA), '')
+          check('按钮文案跟随选中项', /开场白/.test(btnA.textContent) && btnA.classList.contains('ke-has-value'), btnA.textContent.trim())
+          check('getButtonValue 返回选中项', edA.getButtonValue('tpl')?.value === 'a', JSON.stringify(edA.getButtonValue('tpl')?.value))
+          check('触发 customselect 事件', picked?.name === 'tpl' && picked?.item?.label === '开场白' && picked?.action === 'link', JSON.stringify(picked && { name: picked.name, action: picked.action }))
+          check('面板选中后自动关闭', !edA.popover.isOpen, '')
+
+          // 危险协议不得变成链接
+          edA.toolbar.openCustom('tpl')
+          await sleep(40)
+          rows().find((row) => /危险项/.test(row.textContent)).click()
+          await sleep(60)
+          check(
+            'javascript: 链接被拒绞，仅插入纯文本',
+            !/javascript:/i.test(edA.getHTML()) && edA.getText().includes('危险项'),
+            edA.getHTML().slice(-120),
+          )
+
+          edA.setButtonValue('tpl', 'b')
+          check('setButtonValue 同步按钮文案', /结束语/.test(btnA.textContent), btnA.textContent.trim())
+
+          // 同名重新登记（配置热更新场景）：应复用运行时状态并回显到新按钮
+          edA.addButton({ name: 'tpl', text: '模板', options: [{ value: 'b', label: '结束语' }] })
+          await sleep(30)
+          const btnA2 = hostA.querySelector('[data-k-item="tpl"]')
+          check(
+            '同名 addButton 不重复渲染且保留选中项回显',
+            hostA.querySelectorAll('[data-k-item="tpl"]').length === 1 && /结束语/.test(btnA2.textContent),
+            btnA2 ? btnA2.textContent.trim() : '未找到',
+          )
+          edA.destroy()
+          hostA.remove()
+        }
+
+        // B. 从接口读取（load 函数 / url fetch / 缓存 / 失败重试）
+        {
+          let loadCalls = 0
+          const hostB = offscreen()
+          const edB = KEditor.create(hostB, {
+            value: '<p>x</p>',
+            customButtons: [{
+              name: 'slow',
+              text: '慢接口',
+              load: () => {
+                loadCalls += 1
+                return new Promise((resolve) => setTimeout(() => resolve([{ value: '1', label: '延迟项' }]), 140))
+              },
+            }],
+          })
+          await sleep(20)
+          edB.toolbar.openCustom('slow')
+          await sleep(30)
+          check('接口未返回时展示加载态', !!hostB.querySelector('.ke-sel-loading') && hostB.querySelectorAll('.ke-sel-skel').length === 3, '')
+          await sleep(200)
+          check('加载完成后渲染选项', hostB.querySelectorAll('.ke-sel-row').length === 1 && loadCalls === 1, `calls=${loadCalls}`)
+          edB.popover.close()
+          edB.toolbar.openCustom('slow')
+          await sleep(60)
+          check('默认缓存数据，不重复请求', loadCalls === 1, `calls=${loadCalls}`)
+          hostB.querySelector('.ke-panel-icon').click() // 面板内刷新按钮
+          await sleep(240)
+          check('手动刷新跳过缓存重新请求', loadCalls === 2, `calls=${loadCalls}`)
+          edB.popover.close()
+          edB.destroy()
+          hostB.remove()
+        }
+
+        {
+          const hostC = offscreen()
+          const edC = KEditor.create(hostC, {
+            value: '<p>x</p>',
+            customButtons: [{ name: 'api', text: '接口模板', url: 'fixtures/options.json', link: true, insert: 'link' }],
+          })
+          await sleep(20)
+          edC.toolbar.openCustom('api')
+          await sleep(400)
+          const rowsC = [...hostC.querySelectorAll('.ke-sel-row')]
+          check('从 url 接口读取并自动识别嵌套结构', rowsC.length === 4, `rows=${rowsC.length}`)
+          check('分组标题渲染', /人事/.test(hostC.querySelector('.ke-panel-sect')?.textContent || ''), hostC.querySelector('.ke-panel-sect')?.textContent || '无分组')
+          check('远程数据源面板带刷新按钮', !!hostC.querySelector('.ke-panel-icon'), '')
+          const disabledRow = rowsC.find((row) => /已下线/.test(row.textContent))
+          check('disabled 项不可选', disabledRow.disabled === true, '')
+          rowsC[0].click()
+          await sleep(60)
+          check(
+            'link:true 使用数据自带地址插入',
+            /<a[^>]+href="https:\/\/example\.com\/tpl\/notice"[^>]*>系统通知模板<\/a>/.test(edC.getHTML()),
+            edC.getHTML().slice(0, 160),
+          )
+          edC.destroy()
+          hostC.remove()
+        }
+
+        {
+          const hostD = offscreen()
+          const edD = KEditor.create(hostD, {
+            value: '<p>x</p>',
+            customButtons: [{ name: 'bad', text: '失效接口', url: 'fixtures/not-exist.json', cache: false }],
+          })
+          await sleep(20)
+          edD.toolbar.openCustom('bad')
+          await sleep(300)
+          check('接口失败时面板展示错误与重试', /失败|404/.test(hostD.querySelector('.ke-sel-tip-text')?.textContent || '') && !!hostD.querySelector('.ke-sel-tip .ke-btn-primary'), hostD.querySelector('.ke-sel-tip-text')?.textContent || '无提示')
+          edD.setButtonOptions('bad', [{ value: 'fix', label: '外部灌入项' }])
+          await sleep(60)
+          check('setButtonOptions 可外部灌入数据救回', [...hostD.querySelectorAll('.ke-sel-row')].some((row) => /外部灌入项/.test(row.textContent)), '')
+          edD.popover.close()
+          edD.destroy()
+          hostD.remove()
+        }
+
+        // C. onSelect 接管 / type:button / 运行时增删
+        {
+          const hostE = offscreen()
+          let selectSeen = null
+          let clickSeen = 0
+          const edE = KEditor.create(hostE, {
+            value: '<p>原文</p>',
+            toolbar: ['bold', '|', 'mySel', 'myBtn'],
+            customButtons: [
+              {
+                name: 'mySel',
+                type: 'select',
+                text: '自定义',
+                options: [{ value: 'v1', label: '项一', url: 'https://example.com/1' }],
+                link: { mode: 'open', url: 'https://example.com/open/{value}' },
+                onSelect: (item, ctx) => {
+                  selectSeen = { item: item.label, url: ctx.link?.url, mode: ctx.link?.mode }
+                  return false // 自己处理，不改正文
+                },
+              },
+              { name: 'myBtn', type: 'button', text: '插入日期', icon: 'plus', onClick: ({ editor }) => editor.commands.insertHTML('<p>2026-10-13</p>') },
+            ],
+          })
+          await sleep(30)
+          check('显式 toolbar 数组按名称定位自定义按钮', !!hostE.querySelector('[data-k-item="mySel"]') && !!hostE.querySelector('[data-k-item="myBtn"]'), '')
+          check('type:button 支持图标 + 文字', !!hostE.querySelector('[data-k-item="myBtn"] .ke-ico') && /插入日期/.test(hostE.querySelector('[data-k-item="myBtn"]').textContent), '')
+
+          hostE.querySelector('[data-k-item="myBtn"]').click()
+          await sleep(40)
+          check('type:button 点击执行 onClick', edE.getText().includes('2026-10-13'), edE.getText().slice(0, 40))
+
+          const opened = []
+          const realOpen = window.open
+          window.open = (url, target, feat) => { opened.push({ url, target, feat }); return null }
+          edE.toolbar.openCustom('mySel')
+          await sleep(40)
+          hostE.querySelector('.ke-sel-row').click()
+          await sleep(60)
+          window.open = realOpen
+          check('onSelect 收到解析后的链接信息', selectSeen?.url === 'https://example.com/open/v1' && selectSeen?.mode === 'open', JSON.stringify(selectSeen))
+          check('onSelect 返回 false 时不修改正文', !edE.getHTML().includes('<a'), edE.getHTML().slice(0, 100))
+          check('mode:open 不自动开窗（由用户接管）', opened.length === 0, JSON.stringify(opened))
+
+          // 默认 mode:open 行为
+          const hostF = offscreen()
+          const edF = KEditor.create(hostF, {
+            value: '<p>x</p>',
+            customButtons: [{ name: 'go', text: '跳转', options: [{ value: '1', label: '打开文档' }], link: { mode: 'open', url: 'https://example.com/doc' } }],
+          })
+          await sleep(20)
+          const openedF = []
+          window.open = (url, target, feat) => { openedF.push({ url, target, feat }); return null }
+          edF.toolbar.openCustom('go')
+          await sleep(40)
+          hostF.querySelector('.ke-sel-row').click()
+          await sleep(60)
+          window.open = realOpen
+          check('mode:open 选中后新窗口打开且 noopener', openedF.length === 1 && openedF[0].url === 'https://example.com/doc' && /noopener/.test(openedF[0].feat || ''), JSON.stringify(openedF))
+          check('mode:open 不污染正文', !edF.getHTML().includes('<a'), edF.getHTML().slice(0, 80))
+          edF.destroy()
+          hostF.remove()
+
+          // 运行时增删
+          const added = edE.addButton({ name: 'late', text: '后加', options: [{ value: 'z', label: '后加项' }], link: 'https://example.com/{value}' })
+          await sleep(20)
+          check('addButton 运行时新增按钮', !!added && !!hostE.querySelector('[data-k-item="late"]'), '')
+          check(
+            'addButton 默认按下拉选择渲染（与配置路径一致）',
+            !!added && !!added.querySelector('.ke-caret') && added.dataset.kPop === 'late',
+            added ? added.className : '未找到',
+          )
+          edE.toolbar.openCustom('late')
+          await sleep(40)
+          check('addButton 新增的下拉按钮可正常打开面板', [...hostE.querySelectorAll('.ke-sel-row')].some((row) => /后加项/.test(row.textContent)), '')
+          edE.popover.close()
+          edE.addButton({ name: 'late2', text: '插首位' }, { at: 0 })
+          check('addButton 支持指定位置', hostE.querySelector('[data-k-item="late2"]') === hostE.querySelector('.ke-tb-group').children[0], hostE.querySelector('.ke-tb-group').children[0]?.dataset?.kItem || '')
+          check('removeButton 移除按钮', edE.removeButton('late') === true && !hostE.querySelector('[data-k-item="late"]'), '')
+          check('removeButton 对不存在的按钮返回 false', edE.removeButton('nope') === false, '')
+          edE.destroy()
+          hostE.remove()
+        }
+
+        // D2. 窄屏下新增按钮应自动滚进可视区（不被 sticky 尾栏遮住）
+        {
+          const hostH = offscreen(430)
+          const edH = KEditor.create(hostH, { value: '<p>x</p>' })
+          await sleep(60)
+          const tbH = edH.tbEl
+          check('窄屏工具栏确实溢出', tbH.scrollWidth > tbH.clientWidth + 1, `sw=${tbH.scrollWidth} cw=${tbH.clientWidth}`)
+          edH.addButton({ name: 'reveal', text: '显现', options: [{ value: '1', label: '一' }] })
+          await sleep(60)
+          const rb = hostH.querySelector('[data-k-item="reveal"]')
+          const tailW = edH.toolbar.tailEl ? edH.toolbar.tailEl.offsetWidth : 0
+          const viewR = tbH.scrollLeft + tbH.clientWidth - tailW
+          check(
+            'addButton 后新按钮滚进可视区',
+            !!rb && rb.offsetLeft >= tbH.scrollLeft - 1 && rb.offsetLeft + rb.offsetWidth <= viewR + 2,
+            `left=${rb?.offsetLeft} right=${rb ? rb.offsetLeft + rb.offsetWidth : -1} sl=${tbH.scrollLeft} viewR=${Math.round(viewR)}`,
+          )
+          edH.destroy()
+          hostH.remove()
+        }
+
+        // D. 面板细节：note / emptyText / 搜索开关
+        {
+          const hostG = offscreen()
+          const edG = KEditor.create(hostG, {
+            value: '<p>x</p>',
+            customButtons: [
+              { name: 'withNote', text: '带说明', note: '共 2 个模板', options: [{ value: '1', label: '一' }, { value: '2', label: '二' }] },
+              { name: 'emptyOne', text: '空数据', emptyText: '该栏目暂未配置模板' },
+            ],
+          })
+          await sleep(20)
+          edG.toolbar.openCustom('withNote')
+          await sleep(40)
+          check('note 显示在面板头部', /共 2 个模板/.test(hostG.querySelector('.ke-panel-note')?.textContent || ''), hostG.querySelector('.ke-panel-note')?.textContent || '无 note')
+          check('未开 searchable 时不渲染搜索框', !hostG.querySelector('.ke-sel-search'), '')
+          edG.popover.close()
+          edG.toolbar.openCustom('emptyOne')
+          await sleep(40)
+          check('无数据时展示 emptyText', /该栏目暂未配置模板/.test(hostG.querySelector('.ke-sel-tip-text')?.textContent || ''), hostG.querySelector('.ke-sel-tip-text')?.textContent || '无提示')
+          edG.destroy()
+          hostG.remove()
+        }
+
+        // E. replace() 应销毁旧实例（依赖宿主 __keditor__ 反向引用）
+        {
+          const hostR = offscreen()
+          const first = KEditor.create(hostR, { value: '<p>一</p>' })
+          await sleep(20)
+          check('宿主节点写入实例反向引用', hostR.__keditor__ === first, String(!!hostR.__keditor__))
+          const second = KEditor.replace(hostR, { value: '<p>二</p>' })
+          await sleep(30)
+          check('replace 销毁旧实例（不叠加）', first.destroyed === true, `destroyed=${first.destroyed}`)
+          check(
+            'replace 后宿主只挂载一个工具栏且内容正确',
+            hostR.querySelectorAll('.ke-tb').length === 1 && second.getText().includes('二'),
+            `tb=${hostR.querySelectorAll('.ke-tb').length} text=${second.getText().slice(0, 20)}`,
+          )
+          second.destroy()
+          check('销毁后清除反向引用', hostR.__keditor__ === null, String(hostR.__keditor__))
+          hostR.remove()
+        }
+
+        check('自定义按钮流程无新增运行时错误', jsErrors.length === errorsBefore, jsErrors.slice(errorsBefore).join(' | ').slice(0, 200))
+
         editor.destroy()
         check('销毁后清空容器', document.getElementById('editor').innerHTML === '' && !document.getElementById('editor').classList.contains('ke'), '')
 

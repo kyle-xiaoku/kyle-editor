@@ -219,6 +219,87 @@ try {
   ok('Vue UMD 组件挂载', false, e.message)
 }
 
+/* ---------------- 自定义工具栏按钮（安装后产物） ---------------- */
+try {
+  const box = document.createElement('div')
+  document.body.appendChild(box)
+  let selectEvent = null
+  const cbEditor = window.KEditor.create(box, {
+    value: '<p>光标处插入</p>',
+    uploader: 'mock',
+    customButtons: [
+      {
+        name: 'tpl',
+        text: '模板',
+        title: '插入模板',
+        options: [
+          { value: 'opening', label: '开场白', desc: '问候 + 导读' },
+          { value: 'evil', label: '危险项', url: 'javascript:alert(1)' },
+        ],
+        link: { url: 'https://mp.weixin.qq.com/s/tpl-{value}', text: '【{label}】' },
+      },
+      { name: 'api', text: '栏目', url: 'columns.json', link: true, insert: 'link' },
+    ],
+  })
+  await new Promise((r) => setTimeout(r, 200))
+  ok('自定义下拉按钮已渲染到工具栏',
+     !!box.querySelector('[data-k-item="tpl"]') && !!box.querySelector('[data-k-item="api"]'))
+
+  cbEditor.on('customselect', (p) => { selectEvent = p })
+
+  // 静态配置 + 链接模板
+  cbEditor.toolbar.openCustom('tpl')
+  await new Promise((r) => setTimeout(r, 200))
+  const tplRows = Array.from(document.querySelectorAll('.ke-pop:not([hidden]) .ke-sel-row'))
+  ok('静态 options 面板列出选项', tplRows.length === 2, tplRows.length)
+  tplRows[0].click()
+  await new Promise((r) => setTimeout(r, 200))
+  ok('选中后按模板插入跳转链接',
+     /<a[^>]+href="https:\/\/mp\.weixin\.qq\.com\/s\/tpl-opening"/.test(cbEditor.getHTML()),
+     cbEditor.getHTML().slice(0, 140))
+  ok('customselect 事件载荷完整',
+     selectEvent && selectEvent.name === 'tpl' && selectEvent.item.label === '开场白' && selectEvent.action === 'link',
+     JSON.stringify(selectEvent && { n: selectEvent.name, a: selectEvent.action }))
+  ok('按钮文案回显选中项', /开场白/.test(box.querySelector('[data-k-item="tpl"]').textContent),
+     box.querySelector('[data-k-item="tpl"]').textContent.trim())
+
+  // 危险协议不得生成链接
+  cbEditor.toolbar.openCustom('tpl')
+  await new Promise((r) => setTimeout(r, 200))
+  const evil = Array.from(document.querySelectorAll('.ke-pop:not([hidden]) .ke-sel-row')).find((r2) => /危险项/.test(r2.textContent))
+  evil.click()
+  await new Promise((r) => setTimeout(r, 200))
+  ok('javascript: 地址被拒绞，不生成链接', !/javascript:/i.test(cbEditor.getHTML()), cbEditor.getHTML().slice(-120))
+
+  // 从接口读取（真实 fetch）
+  cbEditor.toolbar.openCustom('api')
+  await new Promise((r) => setTimeout(r, 900))
+  const apiRows = Array.from(document.querySelectorAll('.ke-pop:not([hidden]) .ke-sel-row'))
+  ok('url 接口读取并在安装环境中可用', apiRows.length === 2, apiRows.length)
+  if (apiRows.length) {
+    apiRows[0].click()
+    await new Promise((r) => setTimeout(r, 200))
+    ok('接口项自带地址插入成功', /href="https:\/\/mp\.weixin\.qq\.com\/s\/tech"/.test(cbEditor.getHTML()),
+       cbEditor.getHTML().slice(-140))
+  }
+
+  // 运行时 API
+  const added = cbEditor.addButton({ name: 'late', text: '后加', options: [{ value: 'z', label: '后加项' }], link: 'https://x.com/{value}' })
+  await new Promise((r) => setTimeout(r, 120))
+  ok('addButton 运行时新增', !!added && !!box.querySelector('[data-k-item="late"]'))
+  cbEditor.setButtonOptions('late', [{ value: 'y', label: '换数据' }])
+  cbEditor.toolbar.openCustom('late')
+  await new Promise((r) => setTimeout(r, 200))
+  ok('setButtonOptions 外部灌入数据',
+     Array.from(document.querySelectorAll('.ke-pop:not([hidden]) .ke-sel-row')).some((r2) => /换数据/.test(r2.textContent)))
+  cbEditor.popover.close()
+  ok('removeButton 移除', cbEditor.removeButton('late') === true && !box.querySelector('[data-k-item="late"]'))
+  cbEditor.destroy()
+  box.remove()
+} catch (e) {
+  ok('自定义按钮整体流程', false, e.message)
+}
+
 /* ---------------- 汇总 ---------------- */
 window.__RESULT.done = true
 window.__RESULT.total = results.length

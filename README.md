@@ -2,7 +2,7 @@
 
 轻量、美观的**微信公众号风格富文本编辑器**。纯前端实现，无任何后端依赖：图片/视频走**分片上传**（并发、重试、取消、秒传、断点续传），随时切换 **HTML 源码模式**查看或改写产物。支持 `<script>` 直接引入与 Vue 3 安装集成。
 
-- 体积：`dist/keditor.umd.js` 约 139 KB（gzip 37 KB），零运行时依赖，样式随 JS 注入
+- 体积：`dist/keditor.umd.js` 约 202 KB（gzip 51 KB），零运行时依赖，样式随 JS 注入
 - 版式：677px 正文版心、17px/1.75 行距，与公众号观感一致
 - 安全：标签/属性白名单净化，拦截 `on*`、`javascript:`、`script/iframe`
 
@@ -15,6 +15,7 @@
 | 上传 | `chunkSize / concurrency / retries / fingerprint` 可配；内置 mock、http、simple 适配器，也可自定义 `init/put/complete` |
 | 源码 | 工具栏右侧常驻「源码」按钮（`⌘/Ctrl+Shift+K`），进入后正文按钮置灰；格式化缩进、复制、直接编辑并应用（回填自动净化） |
 | 其他 | 实时字数/词数/图片视频统计、预览（手机/平板/电脑屏宽）、全屏编辑、撤销重做（保留光标位置）、只读、窄屏工具栏可左右滑动（常显滚动条 + 边缘渐隐 + 首次引导气泡 + 鼠标拖拽平移）且「源码/预览/全屏」固定右端 |
+| **自定义按钮** | `customButtons` 往工具栏加**下拉选择**按钮：数据可**静态配置**或**从接口读取**（`url` / `load`），选中后按配置**插入跳转链接**或直接打开；面板支持搜索、分组、加载/失败重试/空态、缓存与强制刷新；也可运行时 `addButton` / `removeButton` / `setButtonOptions` |
 
 ## 安装
 
@@ -92,6 +93,115 @@ const onUpload = (payload) => console.log(payload.stage, payload.percent)
 >
 > ESM / Webpack / Vite / React 用法见 [docs/integration.md](docs/integration.md)。
 
+## 自定义工具栏按钮（下拉选择）
+
+不想改源码就能往工具栏加业务按钮。典型场景：插入公司模板、关联栏目、跳转后台页面。
+
+```js
+const editor = KEditor.create('#editor', {
+  customButtons: [
+    // ① 数据从接口读取
+    {
+      name: 'column',
+      text: '栏目',
+      title: '插入栏目链接',
+      searchable: true,               // 面板内搜索
+      url: '/api/columns',            // 内部 fetch；自动识别 items/list/data/rows/records 结构
+      link: true,                     // 直接用每项自带的地址（url / href / link 字段）
+      insert: 'link',
+    },
+    // ② 数据静态配置
+    {
+      name: 'tpl',
+      text: '模板',
+      title: '插入模板',
+      options: [
+        { value: 'opening', label: '开场白', desc: '问候 + 本期导读', group: '通用' },
+        { value: 'ending', label: '结束语', desc: '引导关注与转发', group: '通用' },
+      ],
+      // 链接模板：{value} / {label} 以及选项任意字段都可作占位符
+      link: { url: 'https://mp.weixin.qq.com/s/tpl-{value}', text: '【{label}】', target: '_blank' },
+    },
+  ],
+})
+
+editor.on('customselect', ({ name, item, link, action }) => {
+  console.log(name, item.label, '→', link?.url, '（插入方式：' + action + '）')
+})
+```
+
+> 没传 `toolbar` 时，自定义按钮会**自动追加**到默认工具栏末尾；传了 `toolbar` 数组则按名字定位：`toolbar: ['bold', '|', 'tpl', 'column']`。
+
+### 数据源（优先级 `load` > `url` > `options`）
+
+```js
+// 方式 A：静态数组（也支持纯字符串、或接口原始对象，字段自动归一）
+{ options: [{ value: 'a', label: '选项 A', desc: '说明', url: 'https://x.com/a' }] }
+{ options: ['选项 A', '选项 B'] }
+
+// 方式 B：自定义函数（可异步，能用编辑器实例与闭包里的 axios / 鉴权头）
+{ load: async () => (await fetch('/api/tags').then((r) => r.json())).map((t) => ({ value: t.id, label: t.name })) }
+
+// 方式 C：直接给接口地址
+{
+  url: '/api/columns',
+  fetchOptions: { method: 'POST', headers: { Authorization: 'Bearer x' }, body: '{}', timeout: 8000 },
+  pick: (json) => json.result.records,   // 结构特殊时手动提取数组
+}
+```
+
+- **缓存**：默认只请求一次，面板右上角的刷新按钮可强制重新拉取；`cache: false` 则每次打开都请求
+- **加载态**：面板自动显示 spinner + 骨架屏；**失败**时显示错误文案与「重试」按钮；**空数据**可用 `emptyText` 自定义提示
+- **在编辑器外部拿数据**（Vue / React 里自己请求）：`editor.setButtonOptions('column', list)`
+
+### 跳转链接配置
+
+```js
+{ link: true }                                  // 用每项自带地址
+{ link: 'https://x.com/{value}' }                // 地址模板
+{ link: { url: '...', text: '【{label}】', target: '_blank' } }
+{ link: { mode: 'open', url: 'https://x.com/{value}' } }   // 不写正文，直接新窗口打开
+{ link: (item) => ({ url: item.raw.href, text: item.label }) }  // 完全动态
+```
+
+- `mode: 'insert'`（默认）在光标处插入 `<a>`，`target: '_blank'` 时自动带 `rel="noopener noreferrer"`
+- `mode: 'open'` 直接 `window.open(url, '_blank', 'noopener,noreferrer')`，不改动正文
+- **安全**：地址经白名单校验，`javascript:` / `vbscript:` / `data:` 等一律不会变成链接
+
+### 接管选中行为
+
+```js
+{
+  name: 'tpl',
+  options: [/* ... */],
+  link: 'https://x.com/{value}',
+  insert: 'link',            // 'auto'(默认) | 'link' | 'html' | 'text' | false
+  onSelect: (item, ctx) => {
+    analytics.track('insert_tpl', item.value)   // 埋点，不阻断默认插入
+  },
+}
+
+// 完全自己处理：返回 false 则不改正文
+{ onSelect: (item, ctx) => { ctx.insertHtml(item.raw.html); return false } }
+```
+
+### 运行时增删
+
+```js
+editor.addButton({ name: 'season', text: '节气', options: [...], link: 'https://x.com/{value}' })
+editor.addButton(spec, { at: 0 })          // 插到指定位置
+editor.removeButton('season')              // 移除并中断未完成的接口请求
+editor.setButtonOptions('season', list)    // 外部灌入数据
+editor.getButtonValue('column')            // 读当前选中项
+editor.setButtonValue('column', 'tech')    // 设置选中项（按钮文案同步）
+```
+
+### 普通按钮（非下拉）
+
+```js
+{ name: 'date', type: 'button', text: '插入日期', icon: 'plus', onClick: ({ editor }) => editor.commands.insertHTML('<p>2026-10-13</p>') }
+```
+
 ## 本地运行
 
 ```bash
@@ -100,31 +210,12 @@ npm run build          # 产出 dist/（es + cjs + umd，含 Vue 版本）
 npm run dev            # 静态服务 http://127.0.0.1:5178
 ```
 
-打开：
-
-- `index.html` — 说明首页
-- `demo/script.html` — UMD 引入 + 分片日志面板
-- `demo/esm.html` — 自定义上传适配器演示
-- `demo/vue.html` — Vue 3 组件 + `v-model`
-- `test/smoke.html` — 40 条内置冒烟用例（可视化结果）
-
 ## 验证
 
 ```bash
 npm run build
 npm run dev &                                    # 启动静态服务
 ```
-
-当前状态：`40/40` 用例通过，demo 页面无控制台报错。
-
-## 文档
-
-| 文档 | 内容 |
-|------|------|
-| [docs/integration.md](docs/integration.md) | Script / ESM / Vue3 / React / Nuxt 集成，常见问题 |
-| [docs/api.md](docs/api.md) | 全部配置项、实例方法与事件、工具栏自定义 |
-| [docs/upload-adapter.md](docs/upload-adapter.md) | 分片上传流程、后端接口约定、自定义适配器 |
-
 
 ## 已知限制
 

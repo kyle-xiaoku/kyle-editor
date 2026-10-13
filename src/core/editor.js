@@ -8,6 +8,7 @@ import { PreviewOverlay } from '../ui/preview.js'
 import { MediaBubble } from '../ui/bubble.js'
 import { Toast, lightbox } from '../ui/toast.js'
 import { Toolbar, DEFAULT_TOOLBAR } from './toolbar.js'
+import { normalizeCustomButtons } from './custom-button.js'
 import { Commands } from './commands.js'
 import { History } from './history.js'
 import { MediaManager } from '../media/media.js'
@@ -28,6 +29,8 @@ export const defaults = {
   primaryColor: '#07c160',
   paperWidth: 677,
   toolbar: DEFAULT_TOOLBAR,
+  /** 自定义工具栏按钮（下拉选择，数据可静态配置或从接口读取） */
+  customButtons: [],
   hideToolbar: false,
   hideStatusbar: false,
   readOnly: false,
@@ -60,6 +63,8 @@ export class KEditor {
     this.options = mergeOptions(options)
     this.id = `ke-${(instanceSeq += 1)}`
     this.el = resolveTarget(target, this.id)
+    // 宿主节点反向引用：KEditor.replace() 靠它销毁旧实例，避免同一容器上叠加实例与监听泄漏
+    this.el.__keditor__ = this
     // 必须在 buildDOM() 之前捕获：buildDOM 会清空 this.el 并塞入编辑器自身 DOM，
     // 之后再读 this.el.innerHTML 取到的是工具栏/状态栏，会被当成正文内容（value 为空时触发）
     const hostHTML = this.el.innerHTML
@@ -78,7 +83,7 @@ export class KEditor {
     this.uploader = createUploader(this.options.uploader, this.options.upload)
     this.media = createMedia(this)
     this.history = new History(this.root, { limit: this.options.historyLimit })
-    this.toolbar = new Toolbar(this, this.options.toolbar)
+    this.toolbar = new Toolbar(this, this.options.toolbar, this.options.customButtons)
     this.source = new SourcePanel(this)
     this.previewPanel = new PreviewOverlay(this)
     this.bubble = new MediaBubble(this)
@@ -512,6 +517,42 @@ export class KEditor {
     return this
   }
 
+  /* ------------------------------ 自定义工具栏按钮 ------------------------------ */
+
+  /** 运行时新增自定义按钮（下拉选择 / 普通按钮），返回按钮 DOM */
+  addButton(spec, options) {
+    return this.toolbar.addButton(spec, options)
+  }
+
+  /** 移除自定义按钮，并中断其未完成的接口请求 */
+  removeButton(name) {
+    return this.toolbar.removeButton(name)
+  }
+
+  /** 外部灌入下拉数据（接口在编辑器之外请求时使用），返回规范化后的列表 */
+  setButtonOptions(name, items) {
+    return this.toolbar.setButtonOptions(name, items)
+  }
+
+  /** 读取 / 设置下拉按钮当前选中项 */
+  getButtonValue(name) {
+    return this.toolbar.getButtonValue(name)
+  }
+
+  setButtonValue(name, value) {
+    return this.toolbar.setButtonValue(name, value)
+  }
+
+  /** 统一错误上报：toast 提示 + emit('error') + options.onError */
+  reportError(type, error) {
+    const message = error && error.message ? error.message : String(error)
+    const payload = { type, error: error instanceof Error ? error : new Error(message), message }
+    this.toast?.error(message)
+    this.emit('error', payload)
+    this.options.onError?.(payload)
+    return this
+  }
+
   /* ------------------------------ 面板 ------------------------------ */
 
   toggleSource() {
@@ -632,6 +673,7 @@ export class KEditor {
     this.scrollEl.removeEventListener('scroll', this.scrollHandler)
     window.removeEventListener('resize', this.scrollHandler)
     if (this.fullscreen) document.body.style.overflow = ''
+    if (this.el.__keditor__ === this) this.el.__keditor__ = null
     this.el.innerHTML = ''
     this.el.classList.remove('ke', 'ke-is-fullscreen', 'ke-is-readonly')
     this.el.removeAttribute('style')
@@ -691,11 +733,22 @@ function mergeOptions(options) {
   out.image = { ...defaults.image, ...(options.image || {}) }
   out.paste = { ...defaults.paste, ...(options.paste || {}) }
   out.upload = { ...defaults.upload, ...(options.upload || {}) }
+  out.customButtons = normalizeCustomButtons(options.customButtons)
   if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar
   if (options.toolbar === false) out.toolbar = []
   if (options.toolbar === true) out.toolbar = DEFAULT_TOOLBAR
+  // 未显式配置 toolbar 时，把自定义按钮追加到默认工具栏（:tail 之前），免去重抄整份配置
+  if (out.customButtons.length && options.toolbar === undefined) {
+    out.toolbar = appendCustomNames(DEFAULT_TOOLBAR, out.customButtons.map((spec) => spec.name))
+  }
   out.height = clamp(out.height ?? 460, 0, 4000)
   return out
+}
+
+function appendCustomNames(items, names) {
+  const at = items.indexOf(':tail')
+  const insert = ['|', ...names]
+  return at < 0 ? [...items, ...insert] : [...items.slice(0, at), ...insert, ...items.slice(at)]
 }
 
 function buildStatusbar(editor) {

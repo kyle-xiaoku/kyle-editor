@@ -23,6 +23,7 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 | `paperWidth` | `number` | `677` | 正文版心宽度（与公众号一致） |
 | `primaryColor` | `string` | `'#07c160'` | 主题色（CSS 变量 `--ke-primary`） |
 | `toolbar` | `string[] \| false` | `DEFAULT_TOOLBAR` | 工具栏项，见下表；`false` 隐藏 |
+| `customButtons` | `CustomButtonSpec[]` | `[]` | 自定义工具栏按钮（下拉选择 + 跳转链接），见下文 |
 | `hideToolbar` | `boolean` | `false` | 隐藏工具栏 |
 | `hideStatusbar` | `boolean` | `false` | 隐藏底部状态栏 |
 | `readOnly` | `boolean` | `false` | 只读 |
@@ -47,6 +48,9 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 `undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor`
 `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video`
 `table` `code` `hr` `clear` `source` `preview` `fullscreen`；分隔符 `'|'`，右对齐标记 `':tail'`。
+
+此外可放入 `customButtons` 里定义的**按钮 `name`**（如 `toolbar: ['bold', '|', 'tpl']`）。
+**未传 `toolbar` 时，自定义按钮自动追加到默认工具栏末尾**（插在 `:tail` 之前）。
 
 ```js
 toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail', 'source']
@@ -104,6 +108,112 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | `⌘/Ctrl + S` | 触发 `save` 事件 |
 | `Esc` | 关闭面板 / 退出预览 |
 
+### 自定义工具栏按钮
+
+一个 `customButtons` 条目 = 一个工具栏按钮。`type: 'select'`（默认，下拉选择）或 `type: 'button'`（普通按钮）。
+
+#### CustomButtonSpec
+
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `name` | `string` | — | **必填**，唯一标识；在 `toolbar` 数组里用它定位，也是事件载荷的 `name` |
+| `type` | `'select' \| 'button'` | `'select'` | 下拉选择 / 普通按钮 |
+| `title` | `string` | `text` | 按钮 tooltip，同时作为面板标题 |
+| `text` | `string` | `''` | 按钮文字；下拉按钮选中后会换成选项文字 |
+| `placeholder` | `string` | `text` | 未选中时的按钮文字 |
+| `icon` | `string` | `''` | 内置图标名（`link`/`image`/`plus`…）或原始 SVG 字符串 |
+| `width` | `number` | 自适应 | 面板宽度 px（限定 200–420） |
+| `searchable` | `boolean` | `false` | 面板内搜索框（对 label/desc/value/group 客户端过滤） |
+| `note` | `string` | `''` | 面板右上角说明文字（未搜索时显示） |
+| `emptyText` | `string` | `'暂无数据'` | 空数据提示 |
+| `cache` | `boolean` | `true` | 缓存接口结果；面板右上角刷新按钮可强制重拉 |
+| `keepValue` | `boolean` | `true` | 记住选中项并回显到按钮文字 |
+| `options` | `Option[]` | — | **数据源①** 静态配置 |
+| `load` | `(editor) => Option[] \| Promise` | — | **数据源②** 自定义函数（优先级最高） |
+| `url` | `string` | — | **数据源③** 接口地址，内部 `fetch` |
+| `fetchOptions` | `object` | `{}` | `{method, headers, body, credentials, timeout, fetch, parser}`；`timeout` 默认 10000ms |
+| `pick` | `(payload, editor) => any[]` | 自动 | 从响应里提取数组 |
+| `link` | `\|` | — | 跳转链接配置，见下表 |
+| `insert` | `'auto' \| 'link' \| 'html' \| 'text' \| false` | `'auto'` | 插入方式；`auto` = 链接 > `item.html` > 纯文本；`false` 不改正文 |
+| `onSelect` | `(item, ctx) => any` | — | 选中回调；**返回 `false` 则跳过默认插入** |
+| `onClick` | `({editor, name}) => any` | — | `type:'button'` 的点击回调 |
+| `active` / `enabled` | `(state, editor) => boolean` | — | 按钮高亮 / 可用条件 |
+
+**数据源优先级：`load` > `url` > `options`**。同时配置多项时只生效优先级最高的那个。
+
+#### 选项对象
+
+字段自动归一，接口原始结构一般无需转换：
+
+| 字段 | 别名（自动识别） | 说明 |
+|------|------|------|
+| `value` | `id` `key` `val` `code` | 唯一值，用于占位符与 `setButtonValue` |
+| `label` | `text` `name` `title` | 主标题 |
+| `desc` | `description` `sub` `subtitle` `tip` | 副标题说明 |
+| `url` | `href` `link` `jumpUrl` `jump` | 该项自带地址（`link: true` 时使用） |
+| `group` | — | 分组名，同组归到一个小标题下 |
+| `html` | — | 选中后直接插入的 HTML（`insert: 'html'`） |
+| `disabled` | — | 置灰不可选 |
+
+也支持纯字符串数组：`options: ['开场白', '结束语']`。
+
+#### link 写法
+
+| 写法 | 效果 |
+|------|------|
+| `link: true` | 用每项自带地址（`url`/`href` 字段） |
+| `link: 'https://x.com/{value}'` | 地址模板 |
+| `link: { url, text, target, mode, title }` | 完整配置 |
+| `link: (item, editor) => ({ url, text, target })` | 完全动态 |
+
+- `mode: 'insert'`（默认）在光标处插入 `<a>`；`target: '_blank'`（默认）时自动加 `rel="noopener noreferrer"`
+- `mode: 'open'` 直接 `window.open(url, '_blank', 'noopener,noreferrer')`，不改动正文
+- 模板占位符 `{value}` `{label}` 以及选项的**任意字段**都会被替换（取自原始对象）
+- **安全**：地址经白名单校验，`javascript:` / `vbscript:` / `file:` / 危险 `data:` 一律不生成链接（退化为插入纯文本）
+
+#### onSelect 的 ctx
+
+```js
+onSelect: (item, ctx) => {
+  ctx.editor      // 编辑器实例
+  ctx.item        // 选中项（归一后）
+  ctx.link        // 解析后的链接，无链接时为 null
+  ctx.insertLink(override)   // 插入链接（可覆盖字段）
+  ctx.insertHtml(html)       // 插入 HTML
+  ctx.insertText(text)       // 插入纯文本
+  ctx.open(url, target)      // 新窗口打开
+  return false    // 已自行处理，跳过默认插入
+}
+```
+
+#### 实例方法
+
+```ts
+editor.addButton(spec, { at? })   // 运行时新增（at 为分组内索引），返回按钮 DOM
+editor.removeButton(name)         // 移除并中断未完成的接口请求
+editor.setButtonOptions(name, items) // 外部灌入数据（成为权威数据，不被旧请求覆盖）
+editor.getButtonValue(name)       // 当前选中项
+editor.setButtonValue(name, value)// 设置选中项，按钮文案同步
+editor.toolbar.openCustom(name)   // 代码打开面板
+```
+
+#### 示例
+
+```js
+KEditor.create('#editor', {
+  customButtons: [
+    { name: 'column', text: '栏目', searchable: true, url: '/api/columns', link: true, insert: 'link' },
+    {
+      name: 'tpl', text: '模板', icon: 'plus',
+      options: [{ value: 'opening', label: '开场白', desc: '问候 + 导读', group: '通用' }],
+      link: { url: 'https://mp.weixin.qq.com/s/tpl-{value}', text: '【{label}】' },
+      onSelect: (item) => track('tpl', item.value),
+    },
+    { name: 'date', type: 'button', text: '日期', onClick: ({ editor }) => editor.commands.insertHTML('<p>2026-10-13</p>') },
+  ],
+})
+```
+
 ### 回调
 
 | 回调 | 签名 | 说明 |
@@ -113,7 +223,6 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | `onError(error)` | | 内部异常 |
 | `onUpload({stage, file, kind, url, percent, info})` | | `uploadstart/uploaddone/uploaderror/uploadcancel` |
 | `beforeUpload(file, kind)` | 返回 `File` 改写、`false` 拦截 | 上传前钩子（加水印、二次校验等） |
-
 ---
 
 ## 三、实例属性与方法
@@ -165,6 +274,9 @@ editor.readOnly / sourceMode / previewMode / fullscreen
 | `uploadcancel` | `{file, kind}` | 取消 |
 | `insertmedia` | `{kind, url, node}` | 通过「网络链接」页签插入图片/视频 |
 | `sourcechange` | `{mode: 'source'\|'visual'}` | 源码模式切换 |
+| `customselect` | `{name, item, link, action, editor}` | 自定义下拉按钮选中一项；`action` 为 `'link'\|'html'\|'text'\|'open'\|'none'` |
+| `customclick` | `{name, editor}` | `type:'button'` 自定义按钮被点击 |
+| `error` | `{type, error, message}` | 内部异常（如自定义按钮 `onSelect` 抛错），同时走 `onError` |
 
 ---
 

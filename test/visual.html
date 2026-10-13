@@ -50,6 +50,34 @@
         <hr>
         <p style="text-align:center"><span style="color:#8a8f99">居中说明文字</span></p>`
 
+      // 仅自定义按钮相关的截图状态才挂这些按钮，避免扰动其他状态的截图
+      const CUSTOM_STATES = ['custom', 'customload', 'customerr']
+      const customButtons = CUSTOM_STATES.includes(state)
+        ? [
+            {
+              name: 'column',
+              text: '栏目',
+              title: '插入栏目链接',
+              note: '接口数据',
+              searchable: true,
+              ...(state === 'customload'
+                ? { load: () => new Promise((r) => setTimeout(() => r([]), 8000)) }
+                : state === 'customerr'
+                  ? { url: 'fixtures/not-exist.json', cache: false }
+                  : {
+                      options: [
+                        { value: 'tech', label: '技术前沿', desc: '研发动态与技术解读', url: 'https://mp.weixin.qq.com/s/demo-tech' },
+                        { value: 'product', label: '产品更新', desc: '版本发布与功能说明', url: 'https://mp.weixin.qq.com/s/demo-product' },
+                        { value: 'case', label: '客户案例', desc: '落地实践与效果数据', group: '内容运营', url: 'https://mp.weixin.qq.com/s/demo-case' },
+                        { value: 'activity', label: '活动预告', desc: '直播、沙龙与报名', group: '内容运营', url: 'https://mp.weixin.qq.com/s/demo-activity' },
+                        { value: 'archived', label: '已归档栏目', desc: '不再更新，仅供查看', disabled: true },
+                      ],
+                    }),
+              link: true,
+            },
+          ]
+        : []
+
       const editor = KEditor.create('#editor', {
         value: RICH,
         height: 520,
@@ -58,6 +86,7 @@
         uploader: state === 'uploading' ? KEditor.mockAdapter({ speed: 0.5, latency: 420 }) : 'mock',
         upload: { chunkSize: 200 * 1024, concurrency: 3 },
         image: { compress: false },
+        customButtons,
       })
       window.__editor = editor
 
@@ -168,6 +197,19 @@
           urlInput.value = 'https://media.w3.org/2013/05/sintel/trailer.mp4'
           urlInput.dispatchEvent(new Event('input'))
           await new Promise((r) => setTimeout(r, 900))
+        } else if (state === 'custom') {
+          document.getElementById('desc').textContent = '自定义下拉按钮：接口/静态数据 + 分组 + 搜索 + 选中插入跳转链接'
+          editor.setContent('<p>选中一个栏目，会在光标处插入对应的跳转链接。</p>')
+          editor.toolbar.openCustom('column')
+          await new Promise((r) => setTimeout(r, 200))
+        } else if (state === 'customload') {
+          document.getElementById('desc').textContent = '自定义下拉按钮：接口加载中（骨架屏）'
+          editor.toolbar.openCustom('column')
+          await new Promise((r) => setTimeout(r, 260))
+        } else if (state === 'customerr') {
+          document.getElementById('desc').textContent = '自定义下拉按钮：接口失败提示 + 重试'
+          editor.toolbar.openCustom('column')
+          await new Promise((r) => setTimeout(r, 700))
         } else if (state === 'preview') {
           document.getElementById('desc').textContent = '预览模式（电脑屏宽 677px）'
           editor.openPreview()

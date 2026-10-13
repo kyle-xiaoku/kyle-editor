@@ -1,0 +1,13 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "list": [
+      { "id": "tech", "name": "技术前沿", "desc": "研发动态与技术解读", "href": "https://mp.weixin.qq.com/s/demo-tech" },
+      { "id": "product", "name": "产品更新", "desc": "版本发布与功能说明", "href": "https://mp.weixin.qq.com/s/demo-product" },
+      { "id": "case", "name": "客户案例", "group": "内容运营", "desc": "落地实践与效果数据", "href": "https://mp.weixin.qq.com/s/demo-case" },
+      { "id": "activity", "name": "活动预告", "group": "内容运营", "desc": "直播、沙龙与报名", "href": "https://mp.weixin.qq.com/s/demo-activity" },
+      { "id": "archived", "name": "已归档栏目", "disabled": true, "desc": "不再更新，仅供查看", "href": "https://mp.weixin.qq.com/s/demo-archived" }
+    ]
+  }
+}

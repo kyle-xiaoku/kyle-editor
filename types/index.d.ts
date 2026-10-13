@@ -130,8 +130,8 @@ export interface UploadHookPayload {
   error?: Error
 }
 
-/** 工具栏项名称 */
-export type ToolbarItem =
+/** 内置工具栏项名称 */
+export type BuiltinToolbarItem =
   | 'undo' | 'redo' | 'heading' | 'fontsize'
   | 'bold' | 'italic' | 'underline' | 'strike'
   | 'foreColor' | 'backColor'
@@ -140,6 +140,112 @@ export type ToolbarItem =
   | 'link' | 'image' | 'video' | 'table' | 'code' | 'hr' | 'clear'
   | 'source' | 'preview' | 'fullscreen'
   | '|' | ':tail'
+
+/** 工具栏项：内置名称、分隔符 `|`、`:tail`，或 customButtons 里定义的自定义按钮 name */
+export type ToolbarItem = BuiltinToolbarItem | (string & {})
+
+/* ------------------------------ 自定义工具栏按钮 ------------------------------ */
+
+/** 下拉选项；也接受纯字符串或接口原始对象（自动识别 value/id/key、label/name/title 等常见字段） */
+export interface CustomButtonOption {
+  value?: string | number
+  label?: string
+  /** 副标题说明 */
+  desc?: string
+  /** 该项自带的跳转地址（link:true 时直接使用） */
+  url?: string
+  /** 分组名，同组选项会归到一个小标题下 */
+  group?: string
+  /** 选中后直接插入的 HTML（insert:'html' 或 auto 且无链接时使用） */
+  html?: string
+  disabled?: boolean
+  [key: string]: unknown
+}
+
+/** 选中后的跳转链接配置；字符串模板支持 {value} {label} 及选项任意字段占位符 */
+export type CustomButtonLink =
+  | boolean
+  | string
+  | {
+      /** insert = 插入到正文（默认）；open = 直接新窗口打开 */
+      mode?: 'insert' | 'open'
+      url?: string | ((item: CustomButtonOption, editor: KEditor) => string)
+      text?: string | ((item: CustomButtonOption, editor: KEditor) => string)
+      title?: string | ((item: CustomButtonOption, editor: KEditor) => string)
+      target?: '_blank' | '_self' | boolean
+    }
+  | ((item: CustomButtonOption, editor: KEditor) => string | { mode?: 'insert' | 'open'; url?: string; text?: string; target?: '_blank' | '_self' } | null)
+
+export interface CustomButtonFetchOptions {
+  method?: string
+  headers?: Record<string, string>
+  body?: BodyInit | null
+  credentials?: RequestCredentials
+  /** 超时毫秒，默认 10000 */
+  timeout?: number
+  /** 自定义 fetch 实现（如 axios 包装） */
+  fetch?: typeof fetch
+  /** 自定义响应解析，默认 res.json() */
+  parser?: (res: Response) => unknown | Promise<unknown>
+}
+
+export interface CustomButtonSpec {
+  /** 唯一标识，用于在 toolbar 数组中定位；也作为事件载荷的 name */
+  name: string
+  /** select = 下拉选择（默认）；button = 普通按钮 */
+  type?: 'select' | 'button'
+  /** tooltip */
+  title?: string
+  /** 按钮文字；下拉按钮选中后会替换为选项文字 */
+  text?: string
+  /** 未选中时的占位文字，默认取 text */
+  placeholder?: string
+  /** 内置图标名或原始 SVG 字符串 */
+  icon?: string
+  /** 面板宽度 px（200–420） */
+  width?: number
+  /** 面板内显示搜索框（客户端过滤） */
+  searchable?: boolean
+  /** 面板右上角提示文字 */
+  note?: string
+  /** 空数据提示 */
+  emptyText?: string
+  /** 缓存接口结果，默认 true；面板内刷新按钮可强制重新请求 */
+  cache?: boolean
+  /** 记住选中项并在按钮上回显，默认 true */
+  keepValue?: boolean
+
+  /** 数据源①：静态配置 */
+  options?: CustomButtonOption[] | string[]
+  /** 数据源②：自定义加载函数（可返回 Promise） */
+  load?: (editor: KEditor) => CustomButtonOption[] | Promise<CustomButtonOption[] | unknown> | unknown
+  /** 数据源③：接口地址，内部 fetch；优先级 load > url > options */
+  url?: string
+  fetchOptions?: CustomButtonFetchOptions
+  /** 从接口响应中提取数组；默认自动识别 items/list/data/rows/records/result（含一层嵌套） */
+  pick?: (payload: unknown, editor: KEditor) => unknown
+
+  /** 选中后的跳转链接配置 */
+  link?: CustomButtonLink
+  /** 插入方式：auto（默认，链接 > html > 纯文本）| link | html | text | false（不改正文） */
+  insert?: 'auto' | 'link' | 'html' | 'text' | false | 'none'
+  /** 自定义选中处理；返回 false 表示已自行处理，跳过默认插入 */
+  onSelect?: (item: CustomButtonOption, ctx: {
+    editor: KEditor
+    item: CustomButtonOption
+    link: { mode: 'insert' | 'open'; url: string; text: string; target: '_blank' | '_self'; title: string } | null
+    insertLink: (override?: Record<string, unknown>) => void
+    insertHtml: (html: string) => void
+    insertText: (text: string) => void
+    open: (url?: string, target?: string) => void
+  }) => void | boolean | Promise<void | boolean>
+  /** type:'button' 的点击处理 */
+  onClick?: (ctx: { editor: KEditor; name: string }) => void | Promise<void>
+  /** 高亮条件 */
+  active?: (state: EditorState, editor: KEditor) => boolean
+  /** 可用条件 */
+  enabled?: (state: EditorState, editor: KEditor) => boolean
+}
 
 export interface KEditorOptions {
   value?: string
@@ -151,8 +257,10 @@ export interface KEditorOptions {
   primaryColor?: string
   /** 正文版心宽度，默认 677（公众号） */
   paperWidth?: number
-  /** 工具栏配置；false 隐藏 */
+  /** 工具栏配置；false 隐藏。留空且配置了 customButtons 时，自定义按钮自动追加到默认工具栏 */
   toolbar?: ToolbarItem[] | boolean
+  /** 自定义工具栏按钮（下拉选择，数据可静态配置或从接口读取） */
+  customButtons?: CustomButtonSpec[]
   hideToolbar?: boolean
   hideStatusbar?: boolean
   readOnly?: boolean
@@ -223,6 +331,8 @@ export interface EditorEventMap {
   uploadcancel: [{ file: File; kind: 'image' | 'video' }]
   insertmedia: [{ kind: 'image' | 'video'; url: string; node: HTMLElement }]
   sourcechange: [{ mode: 'source' | 'visual' }]
+  customselect: [{ name: string; item: CustomButtonOption; link: { mode: 'insert' | 'open'; url: string; text: string; target: string; title: string } | null; action: 'link' | 'html' | 'text' | 'open' | 'none'; editor: KEditor }]
+  customclick: [{ name: string; editor: KEditor }]
 }
 
 /* ------------------------------ 实例 ------------------------------ */
@@ -268,7 +378,18 @@ export declare class KEditor {
     tasks: Map<string, unknown>
   }
   readonly uploader: ChunkUploader
-  readonly toolbar: { el: HTMLElement; buttons: Map<string, HTMLElement>; openLink(): void; openMedia(kind: 'image' | 'video'): void; openTable(): void }
+  readonly toolbar: {
+    el: HTMLElement
+    buttons: Map<string, HTMLElement>
+    custom: Map<string, { spec: CustomButtonSpec; button: HTMLElement | null }>
+    openLink(): void
+    openMedia(kind: 'image' | 'video'): void
+    openTable(): void
+    openCustom(name: string): void
+    addButton(spec: CustomButtonSpec, options?: { at?: number }): HTMLElement | null
+    removeButton(name: string): boolean
+    setButtonOptions(name: string, items: unknown): CustomButtonOption[]
+  }
   readonly popover: { el: HTMLElement; open: (...args: unknown[]) => void; close(): void; isOpen: boolean }
   readonly bubble: { el: HTMLElement; show(node: HTMLElement): void; hide(): void }
   readonly source: { el: HTMLElement; show(html: string): void; apply(opts?: { silent?: boolean }): void }
@@ -306,6 +427,15 @@ export declare class KEditor {
   insertVideo(url: string, label?: string): HTMLElement
   cancelUploads(): this
 
+  /** 运行时新增自定义按钮，返回按钮 DOM */
+  addButton(spec: CustomButtonSpec, options?: { at?: number }): HTMLElement | null
+  removeButton(name: string): boolean
+  /** 外部灌入下拉数据（接口在编辑器之外请求时使用） */
+  setButtonOptions(name: string, items: CustomButtonOption[] | string[]): CustomButtonOption[]
+  getButtonValue(name: string): CustomButtonOption | null
+  setButtonValue(name: string, value: string | number): CustomButtonOption | null
+  reportError(type: string, error: unknown): this
+
   toggleSource(): boolean
   enterSource(): void
   exitSource(): void
@@ -331,6 +461,8 @@ export declare const mount: typeof create
 export declare function replace(target: HTMLElement | string, options?: KEditorOptions): KEditor
 export declare const defaults: KEditorOptions
 export declare const DEFAULT_TOOLBAR: ToolbarItem[]
+export declare function normalizeCustomButtons(list: unknown): CustomButtonSpec[]
+export declare function normalizeItems(raw: unknown): CustomButtonOption[]
 export declare function exportHtml(html: string): string
 
 export declare function sanitizeHtml(html: string, opts?: { allowVideoCard?: boolean }): string

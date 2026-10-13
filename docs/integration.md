@@ -282,6 +282,52 @@ KEditor.create('#editor', { toolbar: ['undo', 'redo', '|', 'bold', 'image', 'vid
 
 可用项：`undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor` `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video` `table` `code` `hr` `clear` `source` `preview` `fullscreen`，详见 [api.md](api.md#工具栏项)。
 
+**Q：怎么往工具栏加自己的按钮（比如下拉选模板、选中后插链接）？**
+用 `customButtons`，无需改源码。数据可以静态配置，也可以从接口读：
+
+```js
+KEditor.create('#editor', {
+  customButtons: [
+    { name: 'column', text: '栏目', searchable: true, url: '/api/columns', link: true, insert: 'link' },
+    {
+      name: 'tpl', text: '模板',
+      options: [{ value: 'opening', label: '开场白', desc: '问候 + 本期导读' }],
+      link: { url: 'https://mp.weixin.qq.com/s/tpl-{value}', text: '【{label}】' },
+    },
+  ],
+})
+```
+
+没传 `toolbar` 时会自动追加到工具栏末尾；传了就用名字定位：`toolbar: ['bold', '|', 'tpl']`。
+完整字段（缓存/强制刷新/分组/搜索/失败重试/`mode:'open'` 直接开窗/`onSelect` 接管）见 [api.md](api.md#自定义工具栏按钮)。
+
+**Vue 里更常见的写法是在组件里自己请求接口，再灌给按钮：**
+
+```vue
+<template>
+  <k-editor ref="ed" v-model="html" :options="options" />
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+
+const ed = ref(null)
+const html = ref('')
+const options = {
+  customButtons: [
+    { name: 'column', text: '栏目', options: [], emptyText: '加载中…', link: { url: 'https://x.com/{value}', text: '{label}' } },
+  ],
+}
+
+onMounted(async () => {
+  const list = await fetch('/api/columns').then((r) => r.json())
+  ed.value.editor.setButtonOptions('column', list)   // 数据就绪后刷新下拉
+})
+</script>
+```
+
+> `k-editor` 组件的 `options` 是普通对象，`customButtons` 里的 `load` / `onSelect` 可以直接闭包引用组件里的 axios 实例、埋点函数等。
+
 **Q：不想上传，只想直接贴图片/视频链接？**
 点工具栏的图片或视频按钮 → 切到「网络链接」页签 → 粘贴地址即可插入（会同时提示该地址能否加载）。代码层面等价于：
 ```js

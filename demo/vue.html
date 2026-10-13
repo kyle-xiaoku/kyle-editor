@@ -89,6 +89,24 @@
             // uploader: { type: 'http', initUrl: '/api/upload/init', chunkUrl: '/api/upload/chunk', completeUrl: '/api/upload/complete' }
             uploader: 'mock',
             upload: { chunkSize: 512 * 1024, concurrency: 3 },
+            // 自定义工具栏按钮：数据由 Vue 侧请求后用 editor.setButtonOptions 灌入
+            customButtons: [
+              {
+                name: 'column',
+                text: '栏目',
+                title: '插入栏目链接（Vue 侧接口数据）',
+                note: 'Vue 侧加载',
+                searchable: true,
+                options: [],
+                emptyText: '正在从接口加载栏目…',
+                // 链接模板：{value} / {label} 自动替换为所选项字段
+                link: { url: 'https://mp.weixin.qq.com/s/{value}', text: '【{label}】' },
+                onSelect: (item) => {
+                  lastEvent.value = `customselect → ${item.label}`
+                  syncStats()
+                },
+              },
+            ],
           }
 
           const chars = computed(() => stats.value.chars)
@@ -99,7 +117,22 @@
             if (['uploaddone', 'uploaderror', 'uploadcancel'].includes(payload.stage)) uploading.value = Math.max(0, uploading.value - 1)
             syncStats()
           }
-          const onReady = () => syncStats()
+          const onReady = () => {
+            syncStats()
+            loadColumns()
+          }
+          /** 在 Vue 侧请求接口，再把数据灌给工具栏下拉按钮 */
+          const loadColumns = async () => {
+            try {
+              const res = await fetch('assets/columns.json')
+              const json = await res.json()
+              const list = json?.data?.list || []
+              editorRef.value?.editor?.setButtonOptions('column', list)
+              lastEvent.value = `栏目接口已加载（${list.length} 项）`
+            } catch (error) {
+              lastEvent.value = `栏目接口失败：${error.message}`
+            }
+          }
           const syncStats = () => {
             const editor = editorRef.value?.editor
             if (!editor) return

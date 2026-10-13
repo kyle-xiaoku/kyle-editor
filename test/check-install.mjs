@@ -108,6 +108,8 @@ await rm(join(INSTALL, 'node-entry-check.mjs'), { force: true })
 
 // 消费者页面
 await copyFile(join(ROOT, 'test/fixtures/consumer.html'), join(INSTALL, 'consumer.html'))
+// 自定义按钮的接口数据源（验证安装后 fetch 链路真的可用）
+await copyFile(join(ROOT, 'test/fixtures/columns.json'), join(INSTALL, 'columns.json'))
 
 // ---------- 3. 静态服务 ----------
 const MIME = {

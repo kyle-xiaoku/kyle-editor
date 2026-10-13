@@ -201,6 +201,43 @@ export const CSS = `
 .ke-size-cell:hover { border-color: var(--ke-primary); color: var(--ke-primary); background: var(--ke-primary-weak); }
 .ke-size-cell.ke-is-active { border-color: var(--ke-primary); background: var(--ke-primary); color: #fff; }
 
+/* -------- 自定义下拉按钮 -------- */
+.ke-btn-custom .ke-btn-text { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-btn-custom.ke-has-value { color: var(--ke-primary); }
+.ke-panel-icon { margin-left: auto; width: 22px; height: 22px; padding: 0; border: 1px solid var(--ke-line); border-radius: 50%; background: #fff; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.ke-panel-icon:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
+.ke-panel-icon .ke-ico { width: 13px; height: 13px; }
+.ke-panel-icon + .ke-panel-note { margin-left: 8px; }
+
+.ke-panel-select .ke-sel-search { margin-bottom: 8px; }
+.ke-sel-body { max-height: 268px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+.ke-sel-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 9px; margin-bottom: 3px; border: 1px solid transparent; border-radius: 8px;
+  background: #fff; cursor: pointer; text-align: left; transition: background .14s, border-color .14s;
+}
+.ke-sel-row:last-child { margin-bottom: 0; }
+.ke-sel-row:hover:not(:disabled) { background: #f7f8fa; }
+.ke-sel-row:disabled { cursor: not-allowed; opacity: .45; }
+.ke-sel-row.ke-is-active { border-color: var(--ke-primary); background: var(--ke-primary-weak); }
+.ke-sel-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ke-sel-label { color: #1f2329; font-size: 13.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-sel-row.ke-is-active .ke-sel-label { color: var(--ke-primary); font-weight: 600; }
+.ke-sel-desc { color: #a2a8b3; font-size: 11.5px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-sel-link { display: inline-flex; align-items: center; gap: 3px; color: #2f6fed; font-size: 11px; }
+.ke-sel-link .ke-ico { width: 11px; height: 11px; flex: none; }
+.ke-sel-link i { font-style: normal; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.ke-sel-check { flex: none; width: 16px; height: 16px; color: var(--ke-primary); }
+.ke-sel-check .ke-ico { width: 16px; height: 16px; }
+
+.ke-sel-loading { display: flex; align-items: center; gap: 8px; padding: 4px 2px 10px; color: #6b7280; font-size: 12.5px; }
+.ke-sel-loading .ke-spinner { width: 14px; height: 14px; }
+.ke-sel-skel { height: 34px; margin-bottom: 6px; border-radius: 8px; background: linear-gradient(90deg, #f2f3f5 25%, #e9ebef 37%, #f2f3f5 63%); background-size: 400% 100%; animation: ke-skel 1.3s ease infinite; }
+@keyframes ke-skel { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+.ke-sel-tip { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 12px; text-align: center; }
+.ke-sel-tip-text { color: #a2a8b3; font-size: 12.5px; line-height: 1.6; word-break: break-all; }
+.ke-sel-tip .ke-btn-primary { align-self: center; }
+
 .ke-tabs { display: flex; gap: 4px; margin: -12px -14px 12px; padding: 0 14px; background: #f8f9fb; border-bottom: 1px solid var(--ke-line-weak); }
 .ke-tab { height: 34px; padding: 0 4px; margin-right: 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #6b7280; font-size: 13px; cursor: pointer; }
 .ke-tab:hover { color: #1f2329; }

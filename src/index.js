@@ -4,7 +4,7 @@
  */
 import { KEditor, exportHtml, defaults } from './core/editor.js'
 
-export const version = '1.0.0'
+export const version = typeof __KEDITOR_VERSION__ !== 'undefined' ? __KEDITOR_VERSION__ : '0.0.0-dev'
 
 /** 创建一个编辑器实例，target 可为选择器 / DOM / Vue ref */
 export function create(target, options = {}) {
@@ -23,6 +23,7 @@ export function replace(target, options = {}) {
 
 export { KEditor, defaults, exportHtml }
 export { DEFAULT_TOOLBAR } from './core/toolbar.js'
+export { normalizeCustomButtons, normalizeItems } from './core/custom-button.js'
 export { sanitizeHtml, escapeHtml, isSafeUrl, cleanWordHtml } from './core/sanitize.js'
 export { formatHtml } from './core/format.js'
 export { ChunkUploader, simpleAdapter } from './upload/chunk-uploader.js'
