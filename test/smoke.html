@@ -808,6 +808,123 @@
           hostE.remove()
         }
 
+        // D1. 自定义按钮位置：position 全形态
+        {
+          const hostP = offscreen(1400)
+          const edP = KEditor.create(hostP, {
+            value: '<p>x</p>',
+            customButtons: [
+              { name: 'pStart', text: '最前', position: 'start' },
+              { name: 'pAfter', text: '链接后', position: { after: 'link' } },
+              { name: 'pBefore', text: '图片前', position: { before: 'image' } },
+              { name: 'pTail', text: '尾栏', position: 'tail' },
+              { name: 'pIdx', text: '索引二', position: 2 },
+              { name: 'pDefault', text: '默认末' },
+            ],
+          })
+          await sleep(40)
+          const names = () => edP.toolbar.buttonNodes().map((n) => n.dataset.kItem)
+          const ns = names()
+          check('position: start → 工具栏第一位', ns[0] === 'pStart', ns.slice(0, 3).join(','))
+          check('position: {after:link} → 紧跟链接按钮', ns[ns.indexOf('link') + 1] === 'pAfter', ns.slice(ns.indexOf('link') - 1, ns.indexOf('link') + 2).join(','))
+          check('position: {before:image} → 在图片按钮前', ns[ns.indexOf('image') - 1] === 'pBefore', '')
+          check('position: number → 第 n 个按钮之前', ns[2] === 'pIdx', ns.slice(0, 4).join(','))
+          check('position: tail → 进入右侧吸附尾栏', !!hostP.querySelector('.ke-tb-tail [data-k-item="pTail"]'), '')
+          const groupBtns = [...edP.toolbar.groupEl.children].filter((n) => n.dataset.kItem)
+          check('无 position → 仍追加到主区末尾（尾栏之前）', groupBtns[groupBtns.length - 1]?.dataset.kItem === 'pDefault' && !hostP.querySelector('.ke-tb-tail [data-k-item="pDefault"]'), groupBtns[groupBtns.length - 1]?.dataset.kItem || '空')
+          check('显式定位不插多余分隔符', hostP.querySelector('[data-k-item="link"]').nextElementSibling === hostP.querySelector('[data-k-item="pAfter"]'), hostP.querySelector('[data-k-item="link"]').nextElementSibling?.className || '')
+          const tailBtns = () => [...edP.toolbar.tailEl.children].filter((n) => n.dataset.kItem).map((n) => n.dataset.kItem)
+          check('tail 按钮排在源码/全屏之后', tailBtns().join(',') === 'source,fullscreen,pTail', tailBtns().join(','))
+          edP.removeButton('pDefault')
+          const lastChild = edP.toolbar.groupEl.lastElementChild
+          check('removeButton 顺带清掉随行分隔符', !lastChild.classList.contains('ke-tb-sep'), lastChild.className)
+          edP.destroy()
+          hostP.remove()
+        }
+
+        // D1b. 显式 toolbar 数组与运行时移位
+        {
+          const hostQ = offscreen(1400)
+          const edQ = KEditor.create(hostQ, {
+            value: '<p>x</p>',
+            toolbar: ['bold', 'mine', '|', 'undo', 'redo', ':tail', 'source'],
+            customButtons: [{ name: 'mine', text: '我的', position: 'start' }, { name: 'moved', text: '按位', position: { after: 'mine' } }],
+          })
+          await sleep(40)
+          const qNames = () => edQ.toolbar.buttonNodes().map((n) => n.dataset.kItem)
+          check('toolbar 数组里已写名字 = 用户位置优先（忽略 position）', qNames().join(',') === 'bold,mine,moved,undo,redo,source', qNames().join(','))
+          check('未列出的自定义按钮按 position 自动补位', !!hostQ.querySelector('[data-k-item="moved"]') && qNames()[2] === 'moved', '')
+          edQ.addButton({ name: 'toTail', text: '尾栏', options: [] }, { at: 'tail' })
+          check('addButton at:tail → 吸附尾栏', !!hostQ.querySelector('.ke-tb-tail [data-k-item="toTail"]'), '')
+          edQ.addButton({ name: 'anchor', text: '锚点', options: [] }, { before: 'undo' })
+          check('addButton {before:name} 锚点插入', qNames()[qNames().indexOf('undo') - 1] === 'anchor', qNames().join(','))
+          check('moveButton 可移动内置按钮', edQ.moveButton('redo', { after: 'bold' }) === true && qNames()[1] === 'redo', qNames().slice(0, 3).join(','))
+          check('moveButton 找不到目标时返回 false', edQ.moveButton('nonexistent', 'start') === false, '')
+          edQ.destroy()
+          hostQ.remove()
+        }
+
+        // D1c. 预览按钮已从默认工具栏移除，但能力保留
+        {
+          const hostV = offscreen(1200)
+          const edV = KEditor.create(hostV, { value: '<p>x</p>' })
+          await sleep(40)
+          check('默认工具栏不再包含预览按钮', !hostV.querySelector('[data-k-item="preview"]') && KEditor.DEFAULT_TOOLBAR.indexOf('preview') < 0, KEditor.DEFAULT_TOOLBAR.join(','))
+          check('默认尾栏只剩源码 / 全屏', [...edV.toolbar.tailEl.children].filter((n) => n.dataset.kItem).map((n) => n.dataset.kItem).join(',') === 'source,fullscreen', '')
+          edV.openPreview()
+          await sleep(40)
+          check('预览 API 仍可用（openPreview / previewMode）', edV.previewMode === true && !!hostV.querySelector('.ke-preview'), '')
+          edV.closePreview()
+          edV.destroy()
+          const hostV2 = offscreen(1200)
+          const edV2 = KEditor.create(hostV2, { value: '<p>x</p>', toolbar: ['bold', '|', ':tail', 'source', 'preview', 'fullscreen'] })
+          await sleep(40)
+          hostV2.querySelector('[data-k-item="preview"]').click()
+          await sleep(40)
+          check('显式配置 preview 仍可放回工具栏（尾栏）', edV2.previewMode === true && !!hostV2.querySelector('.ke-tb-tail [data-k-item="preview"]'), '')
+          edV2.destroy()
+          hostV2.remove()
+        }
+
+        // D1d. 宽屏版心：两侧留白不随屏宽放大
+        {
+          const hostW = offscreen(1400)
+          const edW = KEditor.create(hostW, { value: '<p>x</p>' })
+          await sleep(60)
+          const inner = () => {
+            const cs = getComputedStyle(edW.scrollEl)
+            return edW.scrollEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+          }
+          const gap = () => (inner() - edW.paperEl.offsetWidth) / 2
+          check('宽屏默认 fluid：版心随容器生长', edW.paperEl.offsetWidth > 741 && edW.paperEl.classList.contains('ke-is-fluid'), `w=${edW.paperEl.offsetWidth} inner=${inner()}`)
+          check('宽屏两侧留白恒定为 paperGap', Math.abs(gap() - 24) <= 1, `gap=${gap()}`)
+          edW.setPaper({ gap: 0 })
+          check('paperGap 可调：0 时版心填满滚动区', edW.paperEl.offsetWidth === inner(), `w=${edW.paperEl.offsetWidth} inner=${inner()}`)
+          edW.setPaper({ maxWidth: 900 })
+          check('paperMaxWidth 可封顶版心', edW.paperEl.offsetWidth === 900, `w=${edW.paperEl.offsetWidth}`)
+          edW.setPaper({ mode: 'fixed', maxWidth: 0 })
+          check('paperMode:fixed → 版心恒为 paperWidth + 64', edW.paperEl.offsetWidth === 741 && !edW.paperEl.classList.contains('ke-is-fluid'), `w=${edW.paperEl.offsetWidth}`)
+          edW.setPaper({ width: 500, mode: 'fluid' })
+          check('setPaper 运行时可改版心基准宽', edW.paperEl.style.getPropertyValue('--ke-paper') === '500px', edW.paperEl.style.cssText)
+          edW.destroy()
+          const hostN = offscreen(430)
+          const edN = KEditor.create(hostN, { value: '<p>x</p>' })
+          await sleep(60)
+          const innerN = (() => {
+            const cs = getComputedStyle(edN.scrollEl)
+            return edN.scrollEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+          })()
+          check('窄屏 fluid 版心不溢出（等于可用宽）', edN.paperEl.offsetWidth === innerN, `w=${edN.paperEl.offsetWidth} inner=${innerN}`)
+          edN.destroy()
+          hostN.remove()
+          const hostCus = offscreen(1400)
+          const edCus = KEditor.create(hostCus, { value: '<p>x</p>', paperMode: 'fixed', paperWidth: 800 })
+          await sleep(60)
+          check('options.paperMode/paperWidth 初始配置生效', edCus.paperEl.offsetWidth === 864 && !edCus.paperEl.classList.contains('ke-is-fluid'), `w=${edCus.paperEl.offsetWidth}`)
+          edCus.destroy()
+          hostCus.remove()
+        }
+
         // D2. 窄屏下新增按钮应自动滚进可视区（不被 sticky 尾栏遮住）
         {
           const hostH = offscreen(430)

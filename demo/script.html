@@ -54,18 +54,24 @@
             <h2>自定义工具栏按钮</h2>
             <div class="body">
               <p class="hint" style="margin: 0 0 10px">
-                工具栏里的「栏目」从接口 <code class="inline">assets/columns.json</code> 读取，「模板」用静态配置；两者选中后都会插入一个跳转链接。
+                工具栏里的「栏目」从接口 <code class="inline">assets/columns.json</code> 读取，「模板」用静态配置；两者选中后都会插入一个跳转链接。「栏目」写了 <code class="inline">position: { after: 'link' }</code>，所以它紧跟在「链接」按钮后面。
               </p>
               <div class="row-btns">
                 <button class="btn" id="btn-add-custom">addButton 动态新增</button>
                 <button class="btn" id="btn-set-options">setButtonOptions 换数据</button>
                 <button class="btn" id="btn-remove-custom">removeButton 移除</button>
               </div>
+              <div class="row-btns">
+                <button class="btn" id="btn-move-custom">moveButton 移到尾栏</button>
+                <button class="btn" id="btn-paper-mode">版心：宽屏自适应 / 固定 677</button>
+              </div>
               <dl class="kv" style="margin-top: 14px">
                 <dt>数据源</dt>
                 <dd><code class="inline">options</code> 静态配置 · <code class="inline">url</code> 接口 · <code class="inline">load</code> 函数</dd>
                 <dt>跳转链接</dt>
                 <dd><code class="inline">link</code> 支持 <code class="inline">{value}</code> 与 <code class="inline">{label}</code> 占位符</dd>
+                <dt>位置</dt>
+                <dd><code class="inline">position</code>：start / end / tail / 索引 / <code class="inline">{before|after: name}</code></dd>
                 <dt>缓存</dt>
                 <dd>默认开启，面板右上角可强制刷新</dd>
               </dl>
@@ -126,6 +132,7 @@
             text: '栏目',
             title: '插入栏目链接（数据从接口读取）',
             note: '接口数据',
+            position: { after: 'link' }, // 不写则默认追加到主区末尾
             searchable: true,
             url: 'assets/columns.json', // 自动识别 { code, data: { list: [...] } } 这类嵌套结构
             link: true, // 直接用每项自带的地址（href / url 字段）
@@ -183,6 +190,16 @@
       document.getElementById('btn-remove-custom').onclick = () => {
         const ok = editor.removeButton('season')
         addLog('custom', ok ? 'removeButton → season 已移除' : 'season 不存在', !ok)
+      }
+      document.getElementById('btn-move-custom').onclick = () => {
+        const inTail = !!document.querySelector('.ke-tb-tail [data-k-item="column"]')
+        editor.moveButton('column', inTail ? { after: 'link' } : 'tail')
+        addLog('custom', inTail ? 'moveButton → column 回到「链接」之后' : 'moveButton → column 已移到右侧吸附尾栏')
+      }
+      document.getElementById('btn-paper-mode').onclick = () => {
+        const next = editor.paperOptions().mode === 'fluid' ? 'fixed' : 'fluid'
+        const now = editor.setPaper({ mode: next })
+        addLog('paper', `版心模式 → ${now.mode}（实测宽 ${document.querySelector('.ke-paper').offsetWidth}px）`)
       }
 
       document.getElementById('btn-get').onclick = () => {

@@ -23,7 +23,7 @@ export function replace(target, options = {}) {
 
 export { KEditor, defaults, exportHtml }
 export { DEFAULT_TOOLBAR } from './core/toolbar.js'
-export { normalizeCustomButtons, normalizeItems } from './core/custom-button.js'
+export { normalizeCustomButtons, normalizePosition, normalizeItems } from './core/custom-button.js'
 export { sanitizeHtml, escapeHtml, isSafeUrl, cleanWordHtml } from './core/sanitize.js'
 export { formatHtml } from './core/format.js'
 export { ChunkUploader, simpleAdapter } from './upload/chunk-uploader.js'

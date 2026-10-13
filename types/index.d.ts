@@ -141,8 +141,28 @@ export type BuiltinToolbarItem =
   | 'source' | 'preview' | 'fullscreen'
   | '|' | ':tail'
 
-/** 工具栏项：内置名称、分隔符 `|`、`:tail`，或 customButtons 里定义的自定义按钮 name */
+/**
+ * 工具栏项：内置名称、分隔符 `|`、`:tail`，或 customButtons 里定义的自定义按钮 name */
 export type ToolbarItem = BuiltinToolbarItem | (string & {})
+
+/**
+ * 按钮在工具栏里的位置（自定义按钮的 `position`，addButton / moveButton 的目标位）：
+ * - `number`：第 n 个按钮之前（0 起，按视觉顺序计数，分隔符不计数）
+ * - `'start'`：工具栏最前
+ * - `'end'`：主区末尾（尾栏之前，默认）
+ * - `'tail'`：右侧吸附尾栏末尾
+ * - `'link'` 等按钮名：插到该按钮之前
+ * - `{ before: name }` / `{ after: name }`：显式锚点
+ */
+export type ButtonPosition = number | 'start' | 'end' | 'tail' | (string & {}) | { before: string } | { after: string }
+
+/** addButton / moveButton 的位置参数（at 优先于 before / after / index） */
+export interface ButtonPlaceOptions {
+  at?: ButtonPosition
+  before?: string
+  after?: string
+  index?: number
+}
 
 /* ------------------------------ 自定义工具栏按钮 ------------------------------ */
 
@@ -215,6 +235,17 @@ export interface CustomButtonSpec {
   /** 记住选中项并在按钮上回显，默认 true */
   keepValue?: boolean
 
+  /** 按钮在工具栏中的位置，默认追加到主区末尾（尾栏之前） */
+  position?: ButtonPosition
+  /** position 别名（与 addButton 的 options.at 同义） */
+  at?: ButtonPosition
+  /** 简写：插到某按钮之前 */
+  before?: string
+  /** 简写：插到某按钮之后 */
+  after?: string
+  /** 简写：第 n 个按钮之前 */
+  index?: number
+
   /** 数据源①：静态配置 */
   options?: CustomButtonOption[] | string[]
   /** 数据源②：自定义加载函数（可返回 Promise） */
@@ -255,8 +286,14 @@ export interface KEditorOptions {
   minHeight?: number
   /** 主题色，默认微信绿 #07c160 */
   primaryColor?: string
-  /** 正文版心宽度，默认 677（公众号） */
+  /** 版心基准宽度，默认 677（公众号）；fluid 模式下它是最小宽度 */
   paperWidth?: number
+  /** 版心宽度模式：'fluid'（默认，宽屏版心随容器生长）| 'fixed'（恒定 paperWidth + 64） */
+  paperMode?: 'fluid' | 'fixed'
+  /** fluid 模式下单侧留白，默认 24 */
+  paperGap?: number
+  /** fluid 模式下载心最大宽度，0 = 不限 */
+  paperMaxWidth?: number
   /** 工具栏配置；false 隐藏。留空且配置了 customButtons 时，自定义按钮自动追加到默认工具栏 */
   toolbar?: ToolbarItem[] | boolean
   /** 自定义工具栏按钮（下拉选择，数据可静态配置或从接口读取） */
@@ -386,7 +423,9 @@ export declare class KEditor {
     openMedia(kind: 'image' | 'video'): void
     openTable(): void
     openCustom(name: string): void
-    addButton(spec: CustomButtonSpec, options?: { at?: number }): HTMLElement | null
+    addButton(spec: CustomButtonSpec, options?: ButtonPlaceOptions): HTMLElement | null
+    moveButton(name: string, where?: ButtonPosition): boolean
+    buttonNodes(): HTMLElement[]
     removeButton(name: string): boolean
     setButtonOptions(name: string, items: unknown): CustomButtonOption[]
   }
@@ -428,8 +467,13 @@ export declare class KEditor {
   cancelUploads(): this
 
   /** 运行时新增自定义按钮，返回按钮 DOM */
-  addButton(spec: CustomButtonSpec, options?: { at?: number }): HTMLElement | null
+  addButton(spec: CustomButtonSpec, options?: ButtonPlaceOptions): HTMLElement | null
+  /** 移动任意按钮（内置或自定义）到指定位置 */
+  moveButton(name: string, where?: ButtonPosition): boolean
   removeButton(name: string): boolean
+  /** 运行时调整版心：{ width, mode, gap, maxWidth } */
+  setPaper(config?: { width?: number; mode?: 'fluid' | 'fixed'; gap?: number; maxWidth?: number }): { width: number; mode: 'fluid' | 'fixed'; gap: number; maxWidth: number }
+  paperOptions(): { width: number; mode: 'fluid' | 'fixed'; gap: number; maxWidth: number }
   /** 外部灌入下拉数据（接口在编辑器之外请求时使用） */
   setButtonOptions(name: string, items: CustomButtonOption[] | string[]): CustomButtonOption[]
   getButtonValue(name: string): CustomButtonOption | null
@@ -462,6 +506,7 @@ export declare function replace(target: HTMLElement | string, options?: KEditorO
 export declare const defaults: KEditorOptions
 export declare const DEFAULT_TOOLBAR: ToolbarItem[]
 export declare function normalizeCustomButtons(list: unknown): CustomButtonSpec[]
+export declare function normalizePosition(spec: unknown): ButtonPosition | null
 export declare function normalizeItems(raw: unknown): CustomButtonOption[]
 export declare function exportHtml(html: string): string
 

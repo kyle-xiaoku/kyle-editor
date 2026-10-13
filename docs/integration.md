@@ -282,13 +282,15 @@ KEditor.create('#editor', { toolbar: ['undo', 'redo', '|', 'bold', 'image', 'vid
 
 可用项：`undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor` `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video` `table` `code` `hr` `clear` `source` `preview` `fullscreen`，详见 [api.md](api.md#工具栏项)。
 
+> `preview` 已从默认工具栏（`KEditor.DEFAULT_TOOLBAR`）里移除，需要它在 `toolbar` 数组里写回，或直接调 `editor.openPreview()`。自定义按钮可用 `position` / `editor.moveButton()` 放到任意位置，包括 `:tail` 吸附区。
+
 **Q：怎么往工具栏加自己的按钮（比如下拉选模板、选中后插链接）？**
 用 `customButtons`，无需改源码。数据可以静态配置，也可以从接口读：
 
 ```js
 KEditor.create('#editor', {
   customButtons: [
-    { name: 'column', text: '栏目', searchable: true, url: '/api/columns', link: true, insert: 'link' },
+    { name: 'column', text: '栏目', position: { after: 'link' }, searchable: true, url: '/api/columns', link: true, insert: 'link' },
     {
       name: 'tpl', text: '模板',
       options: [{ value: 'opening', label: '开场白', desc: '问候 + 本期导读' }],
@@ -299,6 +301,8 @@ KEditor.create('#editor', {
 ```
 
 没传 `toolbar` 时会自动追加到工具栏末尾；传了就用名字定位：`toolbar: ['bold', '|', 'tpl']`。
+位置也能直接写在按钮上，不用重抄整份工具栏：`position: 'start' | 'end' | 'tail' | 索引 | 按钮名 | { before | after }`；
+运行时还能 `editor.moveButton(name, where)` 移任意按钮（包括内置的）。默认工具栏已不含「预览」，需要时自己写回 `toolbar`。
 完整字段（缓存/强制刷新/分组/搜索/失败重试/`mode:'open'` 直接开窗/`onSelect` 接管）见 [api.md](api.md#自定义工具栏按钮)。
 
 **Vue 里更常见的写法是在组件里自己请求接口，再灌给按钮：**

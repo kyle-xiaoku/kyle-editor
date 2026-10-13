@@ -4,6 +4,7 @@ import { icon } from '../core/icons.js'
 import { colorPanel, headingPanel, fontSizePanel, tablePanel, linkPanel, mediaPanel, selectPanel, normalizeUrl } from '../ui/popover.js'
 import {
   normalizeCustomButton,
+  normalizePosition,
   createButtonRuntime,
   loadItems,
   setRuntimeItems,
@@ -35,7 +36,7 @@ export const DEFAULT_TOOLBAR = [
   'alignLeft', 'alignCenter', 'alignRight', 'alignJustify', '|',
   'ul', 'ol', 'quote', '|',
   'link', 'image', 'video', 'table', 'code', 'hr', 'clear',
-  ':tail', 'source', 'preview', 'fullscreen',
+  ':tail', 'source', 'fullscreen',
 ]
 
 const ITEMS = {
@@ -60,7 +61,7 @@ const ITEMS = {
   hr: { icon: 'hr', title: '分割线', run: (e) => e.commands.insertDivider() },
   clear: { icon: 'clear', title: '清除格式', run: (e) => e.commands.clearFormat() },
   source: { icon: 'source', title: '查看 / 编辑 HTML 源码（⌘/Ctrl+Shift+K）', text: '源码', run: (e) => e.toggleSource(), active: (s) => s.source },
-  preview: { icon: 'preview', title: '预览效果（手机 / 平板 / 电脑宽度）', text: '预览', run: (e) => e.togglePreview(), active: (s) => s.preview },
+  preview: { icon: 'preview', title: '预览效果（手机 / 平板 / 电脑宽度）', text: '预览', run: (e) => e.togglePreview(), active: (s) => s.preview }, // 默认工具栏已不包含，可用 toolbar / position 显式摆放
   fullscreen: { icon: 'expand', title: '全屏编辑', text: '全屏', run: (e) => e.toggleFullscreen(), active: (s) => s.fullscreen },
   foreColor: { pop: 'fore', title: '字体颜色', toggles: true, swatch: 'fore' },
   backColor: { pop: 'back', title: '背景高亮色', toggles: true, swatch: 'back' },
@@ -114,13 +115,11 @@ export class Toolbar {
       if (!spec) continue
       target().appendChild(this.buildButton(key, spec))
     }
-    // toolbar 数组里没列到的自定义按钮也要可用（运行时 addButton 依赖）
+    // toolbar 数组里没列到的自定义按钮：按 position 补位（配置漏写 / 外部直接 new Toolbar 时的兜底）
     for (const [name, entry] of this.custom) {
-      if (!entry.button) {
-        entry.button = this.buildCustomButton(entry)
-        target().appendChild(entry.button)
-      }
-      entry.button.dataset.kCustom = name
+      if (entry.button) continue
+      entry.button = this.buildCustomButton(entry)
+      this.insertButton(entry.button, entry.spec.position)
     }
   }
 
@@ -261,7 +260,7 @@ export class Toolbar {
       class: isSelect ? 'ke-btn-label ke-btn-custom' : 'ke-btn-custom',
       title: spec.title,
       'data-k-item': spec.name,
-      dataset: { kPop: spec.name },
+      dataset: { kPop: spec.name, kCustom: spec.name },
       onclick: (event) => {
         event.preventDefault()
         if (isSelect) this.openCustom(spec.name)
@@ -343,25 +342,68 @@ export class Toolbar {
     this.editor.refresh()
   }
 
-  /** 运行时新增自定义按钮；at 为 toolbar 内插入位置（默认追加到主分组末尾） */
-  addButton(spec, { at } = {}) {
+  /** 运行时新增自定义按钮；位置取 options.at ?? spec.position（默认追加到主分组末尾） */
+  addButton(spec, options = {}) {
     const entry = this.registerCustom(spec)
     if (!entry) return null
     if (entry.button) entry.button.remove()
     entry.button = this.buildCustomButton(entry)
-    const host = this.tailEl || this.groupEl
-    if (!host) return entry.button
-    if (typeof at === 'number' && at >= 0) {
-      const ref = host.children[Math.min(at, host.children.length)]
-      host.insertBefore(entry.button, ref || null)
-    } else {
-      const sep = h('span.ke-tb-sep')
-      host.appendChild(sep)
-      host.appendChild(entry.button)
-    }
+    const where = options.at !== undefined ? options.at : (normalizePosition(options) ?? entry.spec.position)
+    this.insertButton(entry.button, where, { withSep: where == null })
     this.revealButton(entry.button) // 新按钮可能被 sticky 尾栏遮住，滚进可视区让用户看到
     this.syncScrollHints?.()
     return entry.button
+  }
+
+  /** 工具栏内可定位的节点（主区 → 尾区的视觉顺序，不含分隔符） */
+  buttonNodes() {
+    const list = []
+    for (const host of [this.groupEl, this.tailEl]) {
+      if (!host) continue
+      for (const node of host.children) if (node.dataset && node.dataset.kItem) list.push(node)
+    }
+    return list
+  }
+
+  /** 位置描述 → {parent, ref}，ref 为 null 表示追加到 parent 末尾 */
+  slotOf(where) {
+    const mainEnd = { parent: this.groupEl || this.el, ref: null }
+    if (where === 'tail') return { parent: this.tailEl || this.groupEl || this.el, ref: null }
+    if (where == null || where === 'end') return mainEnd
+    if (where === 'start') {
+      const first = this.buttonNodes()[0]
+      return first ? { parent: first.parentElement, ref: first } : mainEnd
+    }
+    const nodes = this.buttonNodes()
+    if (typeof where === 'number') {
+      const ref = nodes[Math.max(0, Math.floor(where))]
+      if (ref) return { parent: ref.parentElement, ref }
+      const last = nodes[nodes.length - 1] // 索引越界：追加到最后一个节点所在区域
+      return last ? { parent: last.parentElement, ref: null } : mainEnd
+    }
+    const after = !!(where && typeof where === 'object' && where.after)
+    const name = typeof where === 'string' ? where : String((after ? where.after : where.before) || '')
+    const anchor = nodes.find((node) => node.dataset.kItem === name)
+    if (!anchor) return mainEnd
+    return { parent: anchor.parentElement, ref: after ? anchor.nextElementSibling || null : anchor }
+  }
+
+  insertButton(button, where, { withSep } = {}) {
+    const { parent, ref } = this.slotOf(where)
+    if (!parent || !button) return
+    if (withSep && !ref) parent.appendChild(h('span.ke-tb-sep'))
+    parent.insertBefore(button, ref || null)
+  }
+
+  /** 运行时把任意按钮（内置或自定义）移到指定位置 */
+  moveButton(name, where) {
+    const node = this.buttonNodes().find((item) => item.dataset.kItem === String(name))
+    if (!node) return false
+    node.remove()
+    this.insertButton(node, where === undefined ? this.custom.get(String(name))?.spec.position ?? null : where)
+    this.revealButton(node)
+    this.syncScrollHints?.()
+    return true
   }
 
   /** 工具栏溢出时把按钮滚进可视区（避开 sticky 尾栏的遮挡） */
@@ -384,7 +426,11 @@ export class Toolbar {
     if (!entry) return false
     abortRuntime(entry.rt)
     if (this.editor.popover.anchor === entry.button) this.editor.popover.close()
+    const prev = entry.button?.previousElementSibling
+    const next = entry.button?.nextElementSibling
     entry.button?.remove()
+    // 顺手清掉随它插入的空隔符，避免留下双分隔线
+    if (prev && prev.classList.contains('ke-tb-sep') && (!next || next.classList.contains('ke-tb-sep'))) prev.remove()
     this.buttons.delete(name)
     this.custom.delete(name)
     this.syncScrollHints?.()

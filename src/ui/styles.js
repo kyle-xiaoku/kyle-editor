@@ -12,6 +12,7 @@ export const CSS = `
   --ke-bg: #f6f7f9;
   --ke-radius: 10px;
   --ke-paper: 677px;
+  --ke-paper-gap: 24px;
   --ke-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .06);
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--ke-text);
@@ -283,6 +284,11 @@ export const CSS = `
   width: min(100%, calc(var(--ke-paper) + 64px)); margin: 0 auto; background: #fff;
   border-radius: 8px; box-shadow: var(--ke-shadow); padding: 32px;
   min-height: var(--ke-min-height, 320px);
+}
+/* 宽屏：版心随容器生长，两侧留白恒定为 --ke-paper-gap，不再随屏宽放大 */
+.ke-paper.ke-is-fluid {
+  width: min(100%, max(calc(var(--ke-paper) + 64px), calc(100% - var(--ke-paper-gap) * 2)));
+  max-width: var(--ke-paper-max, none);
 }
 .ke-content { outline: none; font-size: 17px; line-height: 1.75; color: var(--ke-text); word-break: break-word; }
 .ke-content:empty::before,

@@ -52,6 +52,8 @@
 
       // 仅自定义按钮相关的截图状态才挂这些按钮，避免扰动其他状态的截图
       const CUSTOM_STATES = ['custom', 'customload', 'customerr']
+      // 宽屏对比状态：拉满容器宽度，才能看出版心是否随容器生长
+      if (state === 'wide' || state === 'widefix') document.querySelector('main').style.maxWidth = 'none'
       const customButtons = CUSTOM_STATES.includes(state)
         ? [
             {
@@ -76,7 +78,15 @@
               link: true,
             },
           ]
-        : []
+        : state === 'posbtn'
+          ? [
+              { name: 'atStart', text: '置顶', position: 'start', options: [{ value: 'a', label: '置顶项' }] },
+              { name: 'afterLink', text: '链接后', position: { after: 'link' }, options: [{ value: 'b', label: '链接后项' }] },
+              { name: 'beforeImg', text: '图片前', position: { before: 'image' }, options: [{ value: 'c', label: '图片前项' }] },
+              { name: 'inTail', text: '尾栏', position: 'tail', options: [{ value: 'd', label: '尾栏项' }] },
+              { name: 'byIdx', text: '索引2', position: 2, options: [{ value: 'e', label: '索引项' }] },
+            ]
+          : []
 
       const editor = KEditor.create('#editor', {
         value: RICH,
@@ -86,6 +96,7 @@
         uploader: state === 'uploading' ? KEditor.mockAdapter({ speed: 0.5, latency: 420 }) : 'mock',
         upload: { chunkSize: 200 * 1024, concurrency: 3 },
         image: { compress: false },
+        paperMode: state === 'widefix' ? 'fixed' : 'fluid',
         customButtons,
       })
       window.__editor = editor
@@ -214,6 +225,17 @@
           document.getElementById('desc').textContent = '预览模式（电脑屏宽 677px）'
           editor.openPreview()
           editor.previewPanel.setDevice('pc')
+        } else if (state === 'posbtn') {
+          document.getElementById('desc').textContent =
+            '自定义按钮位置：置顶 / 链接后 / 图片前 / 索引 2 / 右侧尾栏（尾栏末项 = 尾栏）'
+        } else if (state === 'wide') {
+          document.getElementById('desc').textContent =
+            '宽屏版心 fluid（默认）：版心随容器生长，两侧留白恒定 24px'
+          await new Promise((r) => setTimeout(r, 150))
+        } else if (state === 'widefix') {
+          document.getElementById('desc').textContent =
+            '宽屏版心 fixed（options.paperMode）：版心恒定 741px，两侧大片空白（旧行为）'
+          await new Promise((r) => setTimeout(r, 150))
         } else if (state === 'scroll' || state === 'scroll2') {
           document.getElementById('desc').textContent =
             state === 'scroll'

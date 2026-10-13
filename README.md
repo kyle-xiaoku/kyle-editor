@@ -2,8 +2,8 @@
 
 轻量、美观的**微信公众号风格富文本编辑器**。纯前端实现，无任何后端依赖：图片/视频走**分片上传**（并发、重试、取消、秒传、断点续传），随时切换 **HTML 源码模式**查看或改写产物。支持 `<script>` 直接引入与 Vue 3 安装集成。
 
-- 体积：`dist/keditor.umd.js` 约 202 KB（gzip 51 KB），零运行时依赖，样式随 JS 注入
-- 版式：677px 正文版心、17px/1.75 行距，与公众号观感一致
+- 体积：`dist/keditor.umd.js` 约 209 KB（gzip 55 KB），零运行时依赖，样式随 JS 注入
+- 版式：677px 正文版心、17px/1.75 行距，与公众号观感一致；**宽屏下版心自动生长**，两侧留白恒定，不会留出一大块空白
 - 安全：标签/属性白名单净化，拦截 `on*`、`javascript:`、`script/iframe`
 
 ## 功能
@@ -14,8 +14,8 @@
 | 媒体 | 图片/视频**本地上传**（点击、拖拽、粘贴截图）或**直接填网络链接**插入（自动校验可访问性）；分片进度与速度、取消、失败重试、多图多选、大图自动压缩、双击看原图、气泡工具条（对齐/宽度/圆角/替换/删除）、**选中图片后拖拽右下角把手实时缩放** |
 | 上传 | `chunkSize / concurrency / retries / fingerprint` 可配；内置 mock、http、simple 适配器，也可自定义 `init/put/complete` |
 | 源码 | 工具栏右侧常驻「源码」按钮（`⌘/Ctrl+Shift+K`），进入后正文按钮置灰；格式化缩进、复制、直接编辑并应用（回填自动净化） |
-| 其他 | 实时字数/词数/图片视频统计、预览（手机/平板/电脑屏宽）、全屏编辑、撤销重做（保留光标位置）、只读、窄屏工具栏可左右滑动（常显滚动条 + 边缘渐隐 + 首次引导气泡 + 鼠标拖拽平移）且「源码/预览/全屏」固定右端 |
-| **自定义按钮** | `customButtons` 往工具栏加**下拉选择**按钮：数据可**静态配置**或**从接口读取**（`url` / `load`），选中后按配置**插入跳转链接**或直接打开；面板支持搜索、分组、加载/失败重试/空态、缓存与强制刷新；也可运行时 `addButton` / `removeButton` / `setButtonOptions` |
+| 其他 | 实时字数/词数/图片视频统计、预览（手机/平板/电脑屏宽，API 与可选项）、全屏编辑、撤销重做（保留光标位置）、只读、**宽屏版心自适应**（两侧留白恒定，不随屏宽放大）、窄屏工具栏可左右滑动（常显滚动条 + 边缘渐隐 + 首次引导气泡 + 鼠标拖拽平移）且「源码/全屏」固定右端 |
+| **自定义按钮** | `customButtons` 往工具栏加**下拉选择**按钮：数据可**静态配置**或**从接口读取**（`url` / `load`），选中后按配置**插入跳转链接**或直接打开；面板支持搜索、分组、加载/失败重试/空态、缓存与强制刷新；`position` 可把它放到**工具栏任意位置**（含右侧吸附尾栏）；也可运行时 `addButton` / `moveButton` / `removeButton` / `setButtonOptions` |
 
 ## 安装
 
@@ -131,6 +131,39 @@ editor.on('customselect', ({ name, item, link, action }) => {
 ```
 
 > 没传 `toolbar` 时，自定义按钮会**自动追加**到默认工具栏末尾；传了 `toolbar` 数组则按名字定位：`toolbar: ['bold', '|', 'tpl', 'column']`。
+> 想换位置？写 `position`（见下）即可，不需要重抄整份工具栏。
+
+### 按钮位置（可放在工具栏任意位置）
+
+```js
+customButtons: [
+  { name: 'tpl',    text: '模板',   position: 'start' },              // 工具栏最前
+  { name: 'column', text: '栏目',   position: { after: 'link' } },     // 紧跟「链接」之后
+  { name: 'emoji',  text: '表情',   position: { before: 'image' } },   // 插在「图片」之前
+  { name: 'ad',     text: '头图',   position: 2 },                     // 第 3 个按钮之前（0 起）
+  { name: 'stats',  text: '数据',   position: 'tail' },                // 右侧吸附尾栏（与源码/全屏同区）
+  { name: 'draft',  text: '草稿' },                                    // 缺省：主区末尾（尾栏之前）
+]
+```
+
+| `position` 写法 | 含义 |
+| --- | --- |
+| `'start'` | 工具栏第一位 |
+| `'end'` / 不写 | 主区末尾、右侧吸附尾栏之前 |
+| `'tail'` | 右侧吸附尾栏末尾（无尾栏时回退主区末尾） |
+| `number` | 第 n 个按钮之前（按视觉顺序，分隔符不计数） |
+| `'link'` 等按钮名 | 插到该按钮之前 |
+| `{ before: name }` / `{ after: name }` | 显式锚点；`name` 可以是内置按钮，也可以是另一个自定义按钮 |
+
+- 错到不存在的锚点 → 自动回退主区末尾，不报错、不丢按钮。
+- `toolbar` 数组里**已经写过**的自定义按钮名字以数组位置为准（`position` 被忽略），所以两种方式可以混用。
+- 运行时移位（内置按钮也能移）：
+
+```js
+editor.moveButton('column', 'tail')            // 移到右侧尾栏
+editor.moveButton('tpl', { after: 'image' })   // 插到图片按钮之后
+editor.moveButton('hr', 0)                     // 移到第一位
+```
 
 ### 数据源（优先级 `load` > `url` > `options`）
 
@@ -189,11 +222,14 @@ editor.on('customselect', ({ name, item, link, action }) => {
 
 ```js
 editor.addButton({ name: 'season', text: '节气', options: [...], link: 'https://x.com/{value}' })
-editor.addButton(spec, { at: 0 })          // 插到指定位置
-editor.removeButton('season')              // 移除并中断未完成的接口请求
-editor.setButtonOptions('season', list)    // 外部灌入数据
-editor.getButtonValue('column')            // 读当前选中项
-editor.setButtonValue('column', 'tech')    // 设置选中项（按钮文案同步）
+editor.addButton(spec, { at: 0 })                    // 第 1 个按钮之前
+editor.addButton(spec, { at: 'tail' })               // 右侧吸附尾栏
+editor.addButton(spec, { before: 'image' })          // 或 { after: 'link' } / { position: 'start' }
+editor.moveButton('season', { after: 'link' })       // 移位（内置按钮同样可用）
+editor.removeButton('season')                        // 移除并中断未完成的接口请求（附带清掉随行分隔符）
+editor.setButtonOptions('season', list)               // 外部灌入数据
+editor.getButtonValue('column')                       // 读当前选中项
+editor.setButtonValue('column', 'tech')               // 设置选中项（按钮文案同步）
 ```
 
 ### 普通按钮（非下拉）
@@ -201,6 +237,37 @@ editor.setButtonValue('column', 'tech')    // 设置选中项（按钮文案同�
 ```js
 { name: 'date', type: 'button', text: '插入日期', icon: 'plus', onClick: ({ editor }) => editor.commands.insertHTML('<p>2026-10-13</p>') }
 ```
+
+## 版心宽度与宽屏适配
+
+宽屏下如果版心固定 677px，编辑器两侧会出现大片空白。默认采用 **fluid 版心**：版心不小于 `paperWidth`，宽屏时随容器生长，两侧留白恒定为 `paperGap`（不再随屏宽放大）。
+
+```js
+KEditor.create('#editor', {
+  paperWidth: 677,     // 版心基准宽（公众号）；fluid 模式下它是最小宽度
+  paperMode: 'fluid',  // 'fluid'（默认）| 'fixed'（恒定 paperWidth + 64）
+  paperGap: 24,        // fluid 模式下单侧留白
+  paperMaxWidth: 0,    // fluid 模式下的版心上限，0 = 不限
+})
+
+// 运行时调整（侧栏折叠、布局变化时）
+editor.setPaper({ mode: 'fixed' })
+editor.setPaper({ gap: 40, maxWidth: 1000 })
+editor.paperOptions()  // { width, mode, gap, maxWidth }
+```
+
+| 需求 | 配置 |
+| --- | --- |
+| 永远像公众号那样居中一栏 | `paperMode: 'fixed'` |
+| 宽屏也想多写点字 | 默认 fluid（不限上限） |
+| 宽屏但可读性优先 | fluid + `paperMaxWidth: 1000` |
+
+> **预览按钮变更**：`preview` 已从默认工具栏移除（常驻尾栏只剩「源码 / 全屏」），预览能力不变：`editor.openPreview()` / `closePreview()` / `togglePreview()`。需要按钮时把它写回工具栏：
+>
+> ```js
+> toolbar: [...KEditor.DEFAULT_TOOLBAR.slice(0, -1), 'preview', 'fullscreen']
+> // 或直接指定尾栏：toolbar: ['bold', '|', ':tail', 'source', 'preview', 'fullscreen']
+> ```
 
 ## 本地运行
 

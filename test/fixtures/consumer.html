@@ -294,6 +294,41 @@ try {
      Array.from(document.querySelectorAll('.ke-pop:not([hidden]) .ke-sel-row')).some((r2) => /换数据/.test(r2.textContent)))
   cbEditor.popover.close()
   ok('removeButton 移除', cbEditor.removeButton('late') === true && !box.querySelector('[data-k-item="late"]'))
+
+  // 位置与版心（安装后环境同样可用）
+  const posBox = document.createElement('div')
+  posBox.style.cssText = 'width:1200px'
+  document.body.appendChild(posBox)
+  const posEditor = window.KEditor.create(posBox, {
+    value: '<p>x</p>',
+    customButtons: [
+      { name: 'atStart', text: '置顶', position: 'start', options: ['a'] },
+      { name: 'afterLink', text: '链接后', position: { after: 'link' }, options: ['b'] },
+      { name: 'inTail', text: '尾栏', position: 'tail', options: ['c'] },
+      { name: 'plain', text: '默认', options: ['d'] },
+    ],
+  })
+  await new Promise((r) => setTimeout(r, 120))
+  const names = posEditor.toolbar.buttonNodes().map((n) => n.dataset.kItem)
+  ok('position: start 生效', names[0] === 'atStart', names.slice(0, 3).join(','))
+  ok('position: {after:link} 生效', names[names.indexOf('link') + 1] === 'afterLink', '')
+  ok('position: tail 进入吸附尾栏', !!posBox.querySelector('.ke-tb-tail [data-k-item="inTail"]'), '')
+  ok('未写 position 仍到主区末尾',
+     Array.from(posEditor.toolbar.groupEl.children).filter((n) => n.dataset.kItem).pop().dataset.kItem === 'plain', '')
+  ok('normalizePosition 随包导出', typeof window.KEditor.normalizePosition === 'function'
+     && JSON.stringify(window.KEditor.normalizePosition({ after: 'link' })) === '{"after":"link"}', '')
+  posEditor.moveButton('plain', { before: 'undo' })
+  ok('moveButton 移动已存按钮', posEditor.toolbar.buttonNodes()[1].dataset.kItem === 'plain', '')
+  ok('默认工具栏不含预览按钮', window.KEditor.DEFAULT_TOOLBAR.indexOf('preview') < 0, '')
+  ok('fluid 版心默认开启', posEditor.paperOptions().mode === 'fluid'
+     && posBox.querySelector('.ke-paper').classList.contains('ke-is-fluid'), JSON.stringify(posEditor.paperOptions()))
+  const fixedW = (() => { posEditor.setPaper({ mode: 'fixed' }); return posBox.querySelector('.ke-paper').offsetWidth })()
+  posEditor.setPaper({ mode: 'fluid', gap: 0 })
+  const fluidW = posBox.querySelector('.ke-paper').offsetWidth
+  ok('setPaper 运行时切换版心模式', fixedW === 741 && fluidW >= fixedW, `fixed=${fixedW} fluid=${fluidW}`)
+  posEditor.destroy()
+  posBox.remove()
+
   cbEditor.destroy()
   box.remove()
 } catch (e) {

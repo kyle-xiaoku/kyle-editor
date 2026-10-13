@@ -27,7 +27,11 @@ export const defaults = {
   height: 460, // 编辑区可视高度（px），0 = 自适应
   minHeight: 320,
   primaryColor: '#07c160',
-  paperWidth: 677,
+  paperWidth: 677, // 版心基准宽度：窄屏上限、宽屏最小宽度
+  /** 版心宽度模式：'fluid' 宽屏随容器生长（两侧留白恒定）| 'fixed' 恒定版心 */
+  paperMode: 'fluid',
+  paperGap: 24, // fluid 模式下单侧留白（px）
+  paperMaxWidth: 0, // fluid 模式下版心最大宽度，0 = 不限
   toolbar: DEFAULT_TOOLBAR,
   /** 自定义工具栏按钮（下拉选择，数据可静态配置或从接口读取） */
   customButtons: [],
@@ -140,8 +144,33 @@ export class KEditor {
       this.scrollEl.style.height = `${this.options.height}px`
       this.scrollEl.style.maxHeight = `${this.options.height}px`
     }
-    this.paperEl.style.setProperty('--ke-paper', `${this.options.paperWidth}px`)
     this.paperEl.style.setProperty('--ke-min-height', `${this.options.minHeight}px`)
+    this.applyPaper()
+  }
+
+  /** 版心尺寸：宽屏下默认让版心随容器生长，两侧只保留固定留白 */
+  applyPaper() {
+    const { paperWidth, paperMode, paperGap, paperMaxWidth } = this.options
+    this.paperEl.style.setProperty('--ke-paper', `${paperWidth}px`)
+    this.paperEl.style.setProperty('--ke-paper-gap', `${paperGap}px`)
+    if (paperMaxWidth > 0) this.paperEl.style.setProperty('--ke-paper-max', `${paperMaxWidth}px`)
+    else this.paperEl.style.removeProperty('--ke-paper-max')
+    this.paperEl.classList.toggle('ke-is-fluid', paperMode !== 'fixed')
+  }
+
+  /** 运行时调整版心：{width, mode, gap, maxWidth}（mode: 'fluid' | 'fixed'） */
+  setPaper(config = {}) {
+    if (config.width !== undefined) this.options.paperWidth = clamp(Number(config.width) || 0, 200, 8000)
+    if (config.mode !== undefined) this.options.paperMode = config.mode === 'fixed' ? 'fixed' : 'fluid'
+    if (config.gap !== undefined) this.options.paperGap = clamp(Number(config.gap) || 0, 0, 600)
+    if (config.maxWidth !== undefined) this.options.paperMaxWidth = Math.max(0, Number(config.maxWidth) || 0)
+    this.applyPaper()
+    return { ...this.paperOptions() }
+  }
+
+  paperOptions() {
+    const { paperWidth, paperMode, paperGap, paperMaxWidth } = this.options
+    return { width: paperWidth, mode: paperMode, gap: paperGap, maxWidth: paperMaxWidth }
   }
 
   applyTheme() {
@@ -524,6 +553,11 @@ export class KEditor {
     return this.toolbar.addButton(spec, options)
   }
 
+  /** 运行时移动任意按钮位置（内置或自定义）；where 同 spec.position 语义 */
+  moveButton(name, where) {
+    return this.toolbar.moveButton(name, where)
+  }
+
   /** 移除自定义按钮，并中断其未完成的接口请求 */
   removeButton(name) {
     return this.toolbar.removeButton(name)
@@ -737,18 +771,57 @@ function mergeOptions(options) {
   if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar
   if (options.toolbar === false) out.toolbar = []
   if (options.toolbar === true) out.toolbar = DEFAULT_TOOLBAR
-  // 未显式配置 toolbar 时，把自定义按钮追加到默认工具栏（:tail 之前），免去重抄整份配置
-  if (out.customButtons.length && options.toolbar === undefined) {
-    out.toolbar = appendCustomNames(DEFAULT_TOOLBAR, out.customButtons.map((spec) => spec.name))
+  // 自定义按钮按 position 摆进工具栏；toolbar 里已写过的名字以用户摆放的位置为准
+  if (out.customButtons.length && options.toolbar !== false) {
+    out.toolbar = placeCustomNames(out.toolbar, out.customButtons)
   }
   out.height = clamp(out.height ?? 460, 0, 4000)
+  out.paperWidth = clamp(Number(out.paperWidth) || defaults.paperWidth, 200, 8000)
+  out.paperMode = out.paperMode === 'fixed' ? 'fixed' : 'fluid'
+  out.paperGap = Number.isFinite(Number(out.paperGap)) ? clamp(Number(out.paperGap), 0, 600) : defaults.paperGap
+  out.paperMaxWidth = Math.max(0, Number(out.paperMaxWidth) || 0)
   return out
 }
 
-function appendCustomNames(items, names) {
-  const at = items.indexOf(':tail')
-  const insert = ['|', ...names]
-  return at < 0 ? [...items, ...insert] : [...items.slice(0, at), ...insert, ...items.slice(at)]
+/** 工具栏数组里的「按钮」项（排除分隔符与尾区标记） */
+const isButtonItem = (key) => key !== '|' && key !== ':tail'
+
+/** 把自定义按钮按 position 插进 toolbar 数组 */
+function placeCustomNames(items, specs) {
+  const out = [...items]
+  const loose = []
+  for (const spec of specs) {
+    if (out.includes(spec.name)) continue
+    if (spec.position == null) { loose.push(spec.name); continue }
+    out.splice(arrIndexOf(out, spec.position), 0, spec.name)
+  }
+  if (loose.length) out.splice(arrIndexOf(out, null), 0, '|', ...loose) // 无位置：主区末尾加一段
+  return out
+}
+
+/** 位置描述 → toolbar 数组插入下标（找不到锚点时回退主区末尾） */
+function arrIndexOf(items, where) {
+  const mainEnd = (() => {
+    const at = items.indexOf(':tail')
+    return at < 0 ? items.length : at
+  })()
+  if (where == null || where === 'end') return mainEnd
+  if (where === 'start') return 0
+  if (where === 'tail') return items.length
+  if (typeof where === 'number') {
+    let seen = 0
+    for (let i = 0; i < items.length; i++) {
+      if (!isButtonItem(items[i])) continue
+      if (seen === Math.max(0, Math.floor(where))) return i
+      seen++
+    }
+    return mainEnd
+  }
+  const after = !!(where && typeof where === 'object' && where.after)
+  const name = String(typeof where === 'string' ? where : (after ? where.after : where.before) || '')
+  const at = items.indexOf(name)
+  if (at < 0) return mainEnd
+  return after ? at + 1 : at
 }
 
 function buildStatusbar(editor) {

@@ -20,7 +20,10 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 | `placeholder` | `string` | `'开始撰写内容…'` | 空内容占位文案 |
 | `height` | `number` | `460` | 编辑区可视高度（px），`0` 为自适应内容高度 |
 | `minHeight` | `number` | `320` | 纸张最小高度 |
-| `paperWidth` | `number` | `677` | 正文版心宽度（与公众号一致） |
+| `paperWidth` | `number` | `677` | 版心基准宽度（与公众号一致）；`fluid` 模式下它是最小宽度 |
+| `paperMode` | `'fluid' \| 'fixed'` | `'fluid'` | 宽屏时版心随容器生长（两侧留白恒定）/ 恒定 `paperWidth + 64` |
+| `paperGap` | `number` | `24` | `fluid` 模式下单侧留白（px） |
+| `paperMaxWidth` | `number` | `0` | `fluid` 模式下版心最大宽度，`0` = 不限 |
 | `primaryColor` | `string` | `'#07c160'` | 主题色（CSS 变量 `--ke-primary`） |
 | `toolbar` | `string[] \| false` | `DEFAULT_TOOLBAR` | 工具栏项，见下表；`false` 隐藏 |
 | `customButtons` | `CustomButtonSpec[]` | `[]` | 自定义工具栏按钮（下拉选择 + 跳转链接），见下文 |
@@ -49,8 +52,10 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video`
 `table` `code` `hr` `clear` `source` `preview` `fullscreen`；分隔符 `'|'`，右对齐标记 `':tail'`。
 
+> `preview` **不在默认工具栏里**（默认尾栏只有「源码 / 全屏」），需要时手动写回 `toolbar`，或直接调 `editor.openPreview()`。
+
 此外可放入 `customButtons` 里定义的**按钮 `name`**（如 `toolbar: ['bold', '|', 'tpl']`）。
-**未传 `toolbar` 时，自定义按钮自动追加到默认工具栏末尾**（插在 `:tail` 之前）。
+**未传 `toolbar` 时，自定义按钮会自动插入工具栏**：写了 `position` 按 `position` 放，没写则追加到主区末尾（插在 `:tail` 之前）。
 
 ```js
 toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail', 'source']
@@ -65,7 +70,7 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | 左缘渐隐 | 已向右滑出时提示左边还有内容 |
 | 首次引导气泡 | 「工具栏可左右滑动」，3.8s 后或首次滑动后消失，`localStorage` 记忆不重复弹 |
 
-鼠标还可**直接按住拖动**平移工具栏（光标变为抓握状）；触屏沿用系统原生滑动。`:tail` 之后的「源码 / 预览 / 全屏」始终吸附在右端可见。
+鼠标还可**直接按住拖动**平移工具栏（光标变为抓握状）；触屏沿用系统原生滑动。`:tail` 之后的「源码 / 全屏」（以及 `position:'tail'` 的自定义按钮）始终吸附在右端可见。
 
 #### 下拉面板一览
 
@@ -117,6 +122,7 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | 字段 | 类型 | 默认 | 说明 |
 |------|------|------|------|
 | `name` | `string` | — | **必填**，唯一标识；在 `toolbar` 数组里用它定位，也是事件载荷的 `name` |
+| `position` | `number \| 'start' \| 'end' \| 'tail' \| string \| {before} \| {after}` | `'end'` | 按钮在工具栏中的位置，见下表（别名：`at` / `before` / `after` / `index`） |
 | `type` | `'select' \| 'button'` | `'select'` | 下拉选择 / 普通按钮 |
 | `title` | `string` | `text` | 按钮 tooltip，同时作为面板标题 |
 | `text` | `string` | `''` | 按钮文字；下拉按钮选中后会换成选项文字 |
@@ -140,6 +146,23 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | `active` / `enabled` | `(state, editor) => boolean` | — | 按钮高亮 / 可用条件 |
 
 **数据源优先级：`load` > `url` > `options`**。同时配置多项时只生效优先级最高的那个。
+
+#### 按钮位置 `position`
+
+| 写法 | 效果 |
+|------|------|
+| 不写 / `'end'` | 主区末尾，插在右侧吸附尾栏之前（多个未定位按钮共用一个分隔符） |
+| `'start'` | 工具栏第一位 |
+| `'tail'` | 尾栏末尾（与「源码 / 全屏」同区；未启用 `:tail` 时回退主区末尾） |
+| `number` | 第 n 个按钮之前（0 起，按视觉顺序，分隔符不计数） |
+| `'image'` 等按钮名 | 插到该按钮之前 |
+| `{ before: name }` / `{ after: name }` | 显式锚点；锚点可以是内置按钮，也可以是另一个自定义按钮 |
+
+规则：
+- 锚点找不到 → 自动回退主区末尾，不报错、不丢按钮。
+- `toolbar` 数组里已写过该 `name` → 以数组位置为准（`position` 忽略）；数组里没写的自定义按钮会按 `position` 自动补位。
+- 显式定位不插入额外分隔符；仅默认追加时会带一个 `\|`。
+- 运行时可用 `editor.moveButton(name, where)` 移动**任意**按钮（包括内置按钮）。
 
 #### 选项对象
 
@@ -189,12 +212,17 @@ onSelect: (item, ctx) => {
 #### 实例方法
 
 ```ts
-editor.addButton(spec, { at? })   // 运行时新增（at 为分组内索引），返回按钮 DOM
-editor.removeButton(name)         // 移除并中断未完成的接口请求
+editor.addButton(spec, { at? })   // 运行时新增；位置同 position（at / before / after / index），返回按钮 DOM
+editor.moveButton(name, where)    // 移动任意按钮（含内置），where 同 position 写法
+editor.removeButton(name)         // 移除并中断未完成的接口请求（随行分隔符一并清掉）
 editor.setButtonOptions(name, items) // 外部灌入数据（成为权威数据，不被旧请求覆盖）
 editor.getButtonValue(name)       // 当前选中项
 editor.setButtonValue(name, value)// 设置选中项，按钮文案同步
 editor.toolbar.openCustom(name)   // 代码打开面板
+editor.toolbar.buttonNodes()      // 当前工具栏按钮节点（按视觉顺序，不含分隔符）
+
+editor.setPaper({ width, mode, gap, maxWidth })  // 运行时改版心
+editor.paperOptions()                            // 读当前版心配置
 ```
 
 #### 示例
@@ -255,8 +283,10 @@ editor.readOnly / sourceMode / previewMode / fullscreen
 | `cancelUploads()` | 取消全部进行中任务 |
 | `counts()` | `{chars, words, images, videos, uploading}` |
 | `enterSource()` / `exitSource()` / `toggleSource()` | 源码模式 |
-| `openPreview()` / `closePreview()` / `togglePreview()` | 预览模式 |
+| `openPreview()` / `closePreview()` / `togglePreview()` | 预览模式（默认工具栏已无预览按钮，走 API 或自行配置 `toolbar`） |
 | `toggleFullscreen()` | 全屏编辑 |
+| `addButton(spec, place?)` / `moveButton(name, where)` / `removeButton(name)` | 工具栏按钮增 / 移 / 删（详见自定义工具栏按钮） |
+| `setPaper({width?, mode?, gap?, maxWidth?})` / `paperOptions()` | 运行时改版心（宽屏留白策略） |
 | `on(type, fn)` / `off(type, fn)` | 事件订阅，返回取消函数 |
 | `destroy()` | 卸载实例、清理监听与临时 URL |
 

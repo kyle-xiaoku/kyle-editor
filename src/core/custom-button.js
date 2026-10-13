@@ -59,6 +59,35 @@ export function normalizeItems(raw) {
   return pickArray(raw).map(normalizeItem).filter(Boolean)
 }
 
+/**
+ * 归一按钮位置：
+ *   number            第 n 个按钮之前（0 起，按工具栏视觉顺序计数）
+ *   'start'|'end'|'tail'  最左 / 主区最右（默认）/ 右侧尾栏末尾
+ *   'link'            某个按钮名 = 插到它前面
+ *   {before|after}    显式指定锚点
+ */
+export function normalizePosition(spec = {}) {
+  const raw = spec.position !== undefined ? spec.position : spec.at
+  const num = (value) => Math.max(0, Math.floor(Number(value)))
+  const named = (value) => (typeof value === 'object' && value ? value.before || value.after : value)
+  if (typeof raw === 'number' && Number.isFinite(raw)) return num(raw)
+  if (typeof raw === 'string' && raw) {
+    const key = raw.toLowerCase()
+    if (key === 'start' || key === 'begin' || key === 'first') return 'start'
+    if (key === 'end' || key === 'last' || key === 'main') return 'end'
+    if (key === 'tail' || key === ':tail' || key === 'right') return 'tail'
+    return { before: raw }
+  }
+  if (raw && typeof raw === 'object') {
+    if (raw.before) return { before: String(named(raw)) }
+    if (raw.after) return { after: String(named(raw)) }
+  }
+  if (typeof spec.index === 'number' && Number.isFinite(spec.index)) return num(spec.index)
+  if (spec.before) return { before: String(spec.before) }
+  if (spec.after) return { after: String(spec.after) }
+  return null
+}
+
 /** 规范化用户配置，非法项返回 null（不渲染，避免脏配置导致运行时报错） */
 export function normalizeCustomButton(spec) {
   if (!spec || typeof spec !== 'object') return null
@@ -66,6 +95,8 @@ export function normalizeCustomButton(spec) {
   if (!name) return null
   return {
     name,
+    /** 在工具栏里的位置（null = 默认追加到主区末尾） */
+    position: normalizePosition(spec),
     type: spec.type === 'button' ? 'button' : 'select',
     title: spec.title || spec.text || name,
     text: spec.text || '',

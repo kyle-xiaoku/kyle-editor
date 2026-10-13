@@ -11,13 +11,36 @@ const openCustom = (name) => `(async function(){
   const btn=document.querySelector('.ke-tb [data-k-item="${name}"]');
   if(!btn) return JSON.stringify({btn:false});
   btn.click();
-  await new Promise(function(r){setTimeout(r,900)});
-  const pops=[].slice.call(document.querySelectorAll('.ke-pop')).filter(function(p){return !p.hidden});
-  const pop=pops[0];
+  // 轮询等面板渲染出内容（接口冷启动时 900ms 不一定够）
+  let pop=null;
+  for(let i=0;i<40;i++){
+    await new Promise(function(r){setTimeout(r,100)});
+    const pops=[].slice.call(document.querySelectorAll('.ke-pop')).filter(function(p){return !p.hidden});
+    pop=pops[0]||null;
+    if(pop && (pop.querySelector('.ke-sel-row') || pop.querySelector('.ke-sel-tip-text'))) break;
+  }
+  // 先采集面板数据（下面的 moveButton / close 会改掉面板内容）
   const out={btn:true, rows:pop?pop.querySelectorAll('.ke-sel-row').length:0, err:pop?(pop.querySelector('.ke-sel-tip-text')||{}).textContent||'':'no-panel', link:pop?(pop.querySelector('.ke-sel-link i')||{}).textContent||'':''};
   const ed=document.querySelector('.ke');
-  if(ed&&ed.__keditor__) ed.__keditor__.popover.close();
-  return JSON.stringify(out);
+  let place='',paper='';
+  if(ed&&ed.__keditor__){
+    const names=[].slice.call(ed.__keditor__.toolbar.buttonNodes()).map(function(n){return n.dataset.kItem});
+    place=names.indexOf('column')===names.indexOf('link')+1?'after-link':'wrong';
+    ed.__keditor__.moveButton('column','tail');
+    const inTail=!!document.querySelector('.ke-tb-tail [data-k-item="column"]');
+    ed.__keditor__.moveButton('column',{after:'link'});
+    const back=!!document.querySelector('.ke-tb-group [data-k-item="column"]');
+    place=(inTail&&back)?place:'move-fail';
+    const w0=ed.querySelector('.ke-paper').offsetWidth;
+    ed.__keditor__.setPaper({mode:'fixed'});
+    const fixedOff=!ed.querySelector('.ke-paper').classList.contains('ke-is-fluid');
+    ed.__keditor__.setPaper({mode:'fluid'});
+    const fluidOn=ed.querySelector('.ke-paper').classList.contains('ke-is-fluid');
+    const gap=ed.querySelector('.ke-paper').style.getPropertyValue('--ke-paper-gap');
+    paper=(fixedOff&&fluidOn&&gap==='24px'&&ed.querySelector('.ke-paper').offsetWidth===w0)?'paper-ok':'paper-fail(fixed='+fixedOff+',fluid='+fluidOn+',gap='+gap+')';
+    ed.__keditor__.popover.close();
+  }
+  return JSON.stringify(Object.assign(out, { place: place, paper: paper }));
 })()`
 
 const pages = [
@@ -27,7 +50,7 @@ const pages = [
     need: '.ke .ke-tb [data-k-item="video"]',
     label: 'Script(UMD) Demo',
     probe: openCustom('column'),
-    expect: (r) => r.btn && r.rows === 5 && /weixin/.test(r.link) && !r.err,
+    expect: (r) => r.btn && r.rows === 5 && /weixin/.test(r.link) && !r.err && r.place === 'after-link' && r.paper === 'paper-ok',
   },
   { url: `${base}/demo/esm.html`, need: '.ke-content', label: 'ESM Demo' },
   {

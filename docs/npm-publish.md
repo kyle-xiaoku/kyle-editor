@@ -122,9 +122,9 @@ npm view kyle-editor version
 | 命令 | 作用 |
 |------|------|
 | `npm run build` | 产出 `dist/` 6 个文件 |
-| `npm run verify` | build + 66 项冒烟测试 + 4 个 demo 页健康检查 + 类型校验 |
-| `npm run test:package` | 校验包名/exports 路径/`.cjs` 后缀/裸说明符一致性（63 项） |
-| `npm run test:install` | **打 tarball → 隔离目录全新安装 → headless Chrome 跑 40 项消费者用例**（UMD/ESM/Vue 三条集成路径） |
+| `npm run verify` | build + 171 项冒烟测试 + 4 个 demo 页健康检查（含自定义按钮真实交互探针）+ 类型校验 |
+| `npm run test:package` | 校验包名/exports 路径/`.cjs` 后缀/裸说明符一致性（62 项） |
+| `npm run test:install` | **打 tarball → 隔离目录全新安装 → headless Chrome 跑 63 项消费者用例**（UMD/ESM/Vue 三条集成路径） |
 | `npm run pack:check` | build + 一致性校验，并打印**将要发布的文件清单与体积**（不发布） |
 | `npm run release` | 自动先跑 `prerelease`(=verify + test:install) 再 `npm publish` |
 | `npm run release:beta` | 发到 `beta` 标签，不影响 `latest` |
@@ -154,7 +154,7 @@ npm run build && npm run test:install
 
 它会自动完成：`npm pack` → 在 `.pack-verify/install` 建**带独立 `package.json`** 的隔离目录 →
 `npm install <tarball> vue@3`（走官方源）→ 起临时静态服务 → headless Chrome 打开
-`test/fixtures/consumer.html` 跑 **40 项断言**，覆盖：
+`test/fixtures/consumer.html` 跑 **63 项断言**，覆盖：
 
 - **UMD `<script>` 路径**：全局 `KEditor`、工具栏渲染、CSS 随 JS 注入、`setContent/getHTML/getText/getJSON/counts`
 - **安全**：`sanitize` 剔除 `onclick` / `onerror`
@@ -348,7 +348,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run verify
-      - run: npm run test:install    # 打 tarball 真实安装 + headless Chrome 跑 40 项消费者用例
+      - run: npm run test:install    # 打 tarball 真实安装 + headless Chrome 跑 63 项消费者用例
       - run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -387,8 +387,8 @@ cd /Users/kyle/Desktop/work/kyle/keditor
 
 npm login                          # 1) 登录（会拉起浏览器授权；开了 2FA 则发布时补 --otp）
 npm view kyle-editor version       # 2) 应返回 404，确认名字仍可用
-npm run release                    # 3) 构建 + 66 项冒烟 + 4 页健康检查 + 类型/包配置校验
-                                   #    + 40 项真实安装浏览器验证，全部通过后才 publish
+npm run release                    # 3) 构建 + 171 项冒烟 + 4 页健康检查 + 类型/包配置校验
+                                   #    + 63 项真实安装浏览器验证 + 76 项安装总计，全部通过后才 publish
 ```
 
 > `npm login` 必须由**你本人**完成（浏览器授权 / 2FA），无法代执行。
@@ -407,8 +407,8 @@ open https://www.npmjs.com/package/kyle-editor
 
 | 步骤 | 命令 | 期望 |
 |------|------|------|
-| 构建 + 全量验证 | `npm run verify` | 66/66 冒烟、4 页健康、类型通过、63 项包配置通过 |
-| 核对发布内容 | `npm run pack:check` | 38 个文件，约 200 KB，无 test/demo/.DS_Store |
-| **真实安装 + 浏览器验证** | `npm run test:install` | 40/40 通过（UMD/ESM/Vue 三条集成路径） |
+| 构建 + 全量验证 | `npm run verify` | 171/171 冒烟、4 页健康、类型通过、62 项包配置通过 |
+| 核对发布内容 | `npm run pack:check` | 11 个文件，打包 181 KB / 解压 677 KB，无 test/demo/.DS_Store |
+| **真实安装 + 浏览器验证** | `npm run test:install` | 76/76 通过（Node 13 + 浏览器 63，UMD/ESM/Vue 三条集成路径） |
 | 正式发布 | `npm run release` | 返回包页面 URL |
 | 先发 beta 试水 | `npm run release:beta` | `dist-tags` 出现 beta，latest 不变 |

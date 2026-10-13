@@ -10,6 +10,7 @@ const CSS$1 = `
   --ke-bg: #f6f7f9;
   --ke-radius: 10px;
   --ke-paper: 677px;
+  --ke-paper-gap: 24px;
   --ke-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .06);
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--ke-text);
@@ -281,6 +282,11 @@ const CSS$1 = `
   width: min(100%, calc(var(--ke-paper) + 64px)); margin: 0 auto; background: #fff;
   border-radius: 8px; box-shadow: var(--ke-shadow); padding: 32px;
   min-height: var(--ke-min-height, 320px);
+}
+/* 宽屏：版心随容器生长，两侧留白恒定为 --ke-paper-gap，不再随屏宽放大 */
+.ke-paper.ke-is-fluid {
+  width: min(100%, max(calc(var(--ke-paper) + 64px), calc(100% - var(--ke-paper-gap) * 2)));
+  max-width: var(--ke-paper-max, none);
 }
 .ke-content { outline: none; font-size: 17px; line-height: 1.75; color: var(--ke-text); word-break: break-word; }
 .ke-content:empty::before,
@@ -1866,12 +1872,35 @@ function normalizeItem(entry, index) {
 function normalizeItems(raw) {
   return pickArray(raw).map(normalizeItem).filter(Boolean);
 }
+function normalizePosition(spec = {}) {
+  const raw = spec.position !== void 0 ? spec.position : spec.at;
+  const num = (value) => Math.max(0, Math.floor(Number(value)));
+  const named = (value) => typeof value === "object" && value ? value.before || value.after : value;
+  if (typeof raw === "number" && Number.isFinite(raw)) return num(raw);
+  if (typeof raw === "string" && raw) {
+    const key = raw.toLowerCase();
+    if (key === "start" || key === "begin" || key === "first") return "start";
+    if (key === "end" || key === "last" || key === "main") return "end";
+    if (key === "tail" || key === ":tail" || key === "right") return "tail";
+    return { before: raw };
+  }
+  if (raw && typeof raw === "object") {
+    if (raw.before) return { before: String(named(raw)) };
+    if (raw.after) return { after: String(named(raw)) };
+  }
+  if (typeof spec.index === "number" && Number.isFinite(spec.index)) return num(spec.index);
+  if (spec.before) return { before: String(spec.before) };
+  if (spec.after) return { after: String(spec.after) };
+  return null;
+}
 function normalizeCustomButton(spec) {
   if (!spec || typeof spec !== "object") return null;
   const name = String(spec.name || "").trim();
   if (!name) return null;
   return {
     name,
+    /** 在工具栏里的位置（null = 默认追加到主区末尾） */
+    position: normalizePosition(spec),
     type: spec.type === "button" ? "button" : "select",
     title: spec.title || spec.text || name,
     text: spec.text || "",
@@ -2108,7 +2137,6 @@ const DEFAULT_TOOLBAR = [
   "clear",
   ":tail",
   "source",
-  "preview",
   "fullscreen"
 ];
 const ITEMS = {
@@ -2134,6 +2162,7 @@ const ITEMS = {
   clear: { icon: "clear", title: "清除格式", run: (e) => e.commands.clearFormat() },
   source: { icon: "source", title: "查看 / 编辑 HTML 源码（⌘/Ctrl+Shift+K）", text: "源码", run: (e) => e.toggleSource(), active: (s) => s.source },
   preview: { icon: "preview", title: "预览效果（手机 / 平板 / 电脑宽度）", text: "预览", run: (e) => e.togglePreview(), active: (s) => s.preview },
+  // 默认工具栏已不包含，可用 toolbar / position 显式摆放
   fullscreen: { icon: "expand", title: "全屏编辑", text: "全屏", run: (e) => e.toggleFullscreen(), active: (s) => s.fullscreen },
   foreColor: { pop: "fore", title: "字体颜色", toggles: true, swatch: "fore" },
   backColor: { pop: "back", title: "背景高亮色", toggles: true, swatch: "back" }
@@ -2185,11 +2214,9 @@ class Toolbar {
       target().appendChild(this.buildButton(key, spec));
     }
     for (const [name, entry] of this.custom) {
-      if (!entry.button) {
-        entry.button = this.buildCustomButton(entry);
-        target().appendChild(entry.button);
-      }
-      entry.button.dataset.kCustom = name;
+      if (entry.button) continue;
+      entry.button = this.buildCustomButton(entry);
+      this.insertButton(entry.button, entry.spec.position);
     }
   }
   buildButton(name, spec) {
@@ -2319,7 +2346,7 @@ class Toolbar {
       class: isSelect ? "ke-btn-label ke-btn-custom" : "ke-btn-custom",
       title: spec.title,
       "data-k-item": spec.name,
-      dataset: { kPop: spec.name },
+      dataset: { kPop: spec.name, kCustom: spec.name },
       onclick: (event) => {
         event.preventDefault();
         if (isSelect) this.openCustom(spec.name);
@@ -2395,26 +2422,66 @@ class Toolbar {
     }
     this.editor.refresh();
   }
-  /** 运行时新增自定义按钮；at 为 toolbar 内插入位置（默认追加到主分组末尾） */
-  addButton(spec, { at } = {}) {
+  /** 运行时新增自定义按钮；位置取 options.at ?? spec.position（默认追加到主分组末尾） */
+  addButton(spec, options = {}) {
     var _a;
     const entry = this.registerCustom(spec);
     if (!entry) return null;
     if (entry.button) entry.button.remove();
     entry.button = this.buildCustomButton(entry);
-    const host = this.tailEl || this.groupEl;
-    if (!host) return entry.button;
-    if (typeof at === "number" && at >= 0) {
-      const ref = host.children[Math.min(at, host.children.length)];
-      host.insertBefore(entry.button, ref || null);
-    } else {
-      const sep2 = h("span.ke-tb-sep");
-      host.appendChild(sep2);
-      host.appendChild(entry.button);
-    }
+    const where = options.at !== void 0 ? options.at : normalizePosition(options) ?? entry.spec.position;
+    this.insertButton(entry.button, where, { withSep: where == null });
     this.revealButton(entry.button);
     (_a = this.syncScrollHints) == null ? void 0 : _a.call(this);
     return entry.button;
+  }
+  /** 工具栏内可定位的节点（主区 → 尾区的视觉顺序，不含分隔符） */
+  buttonNodes() {
+    const list = [];
+    for (const host of [this.groupEl, this.tailEl]) {
+      if (!host) continue;
+      for (const node of host.children) if (node.dataset && node.dataset.kItem) list.push(node);
+    }
+    return list;
+  }
+  /** 位置描述 → {parent, ref}，ref 为 null 表示追加到 parent 末尾 */
+  slotOf(where) {
+    const mainEnd = { parent: this.groupEl || this.el, ref: null };
+    if (where === "tail") return { parent: this.tailEl || this.groupEl || this.el, ref: null };
+    if (where == null || where === "end") return mainEnd;
+    if (where === "start") {
+      const first2 = this.buttonNodes()[0];
+      return first2 ? { parent: first2.parentElement, ref: first2 } : mainEnd;
+    }
+    const nodes = this.buttonNodes();
+    if (typeof where === "number") {
+      const ref = nodes[Math.max(0, Math.floor(where))];
+      if (ref) return { parent: ref.parentElement, ref };
+      const last = nodes[nodes.length - 1];
+      return last ? { parent: last.parentElement, ref: null } : mainEnd;
+    }
+    const after = !!(where && typeof where === "object" && where.after);
+    const name = typeof where === "string" ? where : String((after ? where.after : where.before) || "");
+    const anchor = nodes.find((node) => node.dataset.kItem === name);
+    if (!anchor) return mainEnd;
+    return { parent: anchor.parentElement, ref: after ? anchor.nextElementSibling || null : anchor };
+  }
+  insertButton(button, where, { withSep } = {}) {
+    const { parent, ref } = this.slotOf(where);
+    if (!parent || !button) return;
+    if (withSep && !ref) parent.appendChild(h("span.ke-tb-sep"));
+    parent.insertBefore(button, ref || null);
+  }
+  /** 运行时把任意按钮（内置或自定义）移到指定位置 */
+  moveButton(name, where) {
+    var _a, _b;
+    const node = this.buttonNodes().find((item) => item.dataset.kItem === String(name));
+    if (!node) return false;
+    node.remove();
+    this.insertButton(node, where === void 0 ? ((_a = this.custom.get(String(name))) == null ? void 0 : _a.spec.position) ?? null : where);
+    this.revealButton(node);
+    (_b = this.syncScrollHints) == null ? void 0 : _b.call(this);
+    return true;
   }
   /** 工具栏溢出时把按钮滚进可视区（避开 sticky 尾栏的遮挡） */
   revealButton(button) {
@@ -2431,15 +2498,18 @@ class Toolbar {
   }
   /** 移除自定义按钮并中断其未完成的请求 */
   removeButton(name) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const entry = this.custom.get(name);
     if (!entry) return false;
     abortRuntime(entry.rt);
     if (this.editor.popover.anchor === entry.button) this.editor.popover.close();
-    (_a = entry.button) == null ? void 0 : _a.remove();
+    const prev = (_a = entry.button) == null ? void 0 : _a.previousElementSibling;
+    const next = (_b = entry.button) == null ? void 0 : _b.nextElementSibling;
+    (_c = entry.button) == null ? void 0 : _c.remove();
+    if (prev && prev.classList.contains("ke-tb-sep") && (!next || next.classList.contains("ke-tb-sep"))) prev.remove();
     this.buttons.delete(name);
     this.custom.delete(name);
-    (_b = this.syncScrollHints) == null ? void 0 : _b.call(this);
+    (_d = this.syncScrollHints) == null ? void 0 : _d.call(this);
     return true;
   }
   /** 外部灌入下拉数据（接口在编辑器之外请求时用），并刷新已打开的面板 */
@@ -3981,6 +4051,13 @@ const defaults = {
   minHeight: 320,
   primaryColor: "#07c160",
   paperWidth: 677,
+  // 版心基准宽度：窄屏上限、宽屏最小宽度
+  /** 版心宽度模式：'fluid' 宽屏随容器生长（两侧留白恒定）| 'fixed' 恒定版心 */
+  paperMode: "fluid",
+  paperGap: 24,
+  // fluid 模式下单侧留白（px）
+  paperMaxWidth: 0,
+  // fluid 模式下版心最大宽度，0 = 不限
   toolbar: DEFAULT_TOOLBAR,
   /** 自定义工具栏按钮（下拉选择，数据可静态配置或从接口读取） */
   customButtons: [],
@@ -4084,8 +4161,30 @@ class KEditor {
       this.scrollEl.style.height = `${this.options.height}px`;
       this.scrollEl.style.maxHeight = `${this.options.height}px`;
     }
-    this.paperEl.style.setProperty("--ke-paper", `${this.options.paperWidth}px`);
     this.paperEl.style.setProperty("--ke-min-height", `${this.options.minHeight}px`);
+    this.applyPaper();
+  }
+  /** 版心尺寸：宽屏下默认让版心随容器生长，两侧只保留固定留白 */
+  applyPaper() {
+    const { paperWidth, paperMode, paperGap, paperMaxWidth } = this.options;
+    this.paperEl.style.setProperty("--ke-paper", `${paperWidth}px`);
+    this.paperEl.style.setProperty("--ke-paper-gap", `${paperGap}px`);
+    if (paperMaxWidth > 0) this.paperEl.style.setProperty("--ke-paper-max", `${paperMaxWidth}px`);
+    else this.paperEl.style.removeProperty("--ke-paper-max");
+    this.paperEl.classList.toggle("ke-is-fluid", paperMode !== "fixed");
+  }
+  /** 运行时调整版心：{width, mode, gap, maxWidth}（mode: 'fluid' | 'fixed'） */
+  setPaper(config = {}) {
+    if (config.width !== void 0) this.options.paperWidth = clamp$1(Number(config.width) || 0, 200, 8e3);
+    if (config.mode !== void 0) this.options.paperMode = config.mode === "fixed" ? "fixed" : "fluid";
+    if (config.gap !== void 0) this.options.paperGap = clamp$1(Number(config.gap) || 0, 0, 600);
+    if (config.maxWidth !== void 0) this.options.paperMaxWidth = Math.max(0, Number(config.maxWidth) || 0);
+    this.applyPaper();
+    return { ...this.paperOptions() };
+  }
+  paperOptions() {
+    const { paperWidth, paperMode, paperGap, paperMaxWidth } = this.options;
+    return { width: paperWidth, mode: paperMode, gap: paperGap, maxWidth: paperMaxWidth };
   }
   applyTheme() {
     if (this.options.primaryColor) this.el.style.setProperty("--ke-primary", this.options.primaryColor);
@@ -4421,6 +4520,10 @@ class KEditor {
   addButton(spec, options) {
     return this.toolbar.addButton(spec, options);
   }
+  /** 运行时移动任意按钮位置（内置或自定义）；where 同 spec.position 语义 */
+  moveButton(name, where) {
+    return this.toolbar.moveButton(name, where);
+  }
   /** 移除自定义按钮，并中断其未完成的接口请求 */
   removeButton(name) {
     return this.toolbar.removeButton(name);
@@ -4608,16 +4711,53 @@ function mergeOptions(options) {
   if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar;
   if (options.toolbar === false) out.toolbar = [];
   if (options.toolbar === true) out.toolbar = DEFAULT_TOOLBAR;
-  if (out.customButtons.length && options.toolbar === void 0) {
-    out.toolbar = appendCustomNames(DEFAULT_TOOLBAR, out.customButtons.map((spec) => spec.name));
+  if (out.customButtons.length && options.toolbar !== false) {
+    out.toolbar = placeCustomNames(out.toolbar, out.customButtons);
   }
   out.height = clamp$1(out.height ?? 460, 0, 4e3);
+  out.paperWidth = clamp$1(Number(out.paperWidth) || defaults.paperWidth, 200, 8e3);
+  out.paperMode = out.paperMode === "fixed" ? "fixed" : "fluid";
+  out.paperGap = Number.isFinite(Number(out.paperGap)) ? clamp$1(Number(out.paperGap), 0, 600) : defaults.paperGap;
+  out.paperMaxWidth = Math.max(0, Number(out.paperMaxWidth) || 0);
   return out;
 }
-function appendCustomNames(items, names) {
-  const at = items.indexOf(":tail");
-  const insert = ["|", ...names];
-  return at < 0 ? [...items, ...insert] : [...items.slice(0, at), ...insert, ...items.slice(at)];
+const isButtonItem = (key) => key !== "|" && key !== ":tail";
+function placeCustomNames(items, specs) {
+  const out = [...items];
+  const loose = [];
+  for (const spec of specs) {
+    if (out.includes(spec.name)) continue;
+    if (spec.position == null) {
+      loose.push(spec.name);
+      continue;
+    }
+    out.splice(arrIndexOf(out, spec.position), 0, spec.name);
+  }
+  if (loose.length) out.splice(arrIndexOf(out, null), 0, "|", ...loose);
+  return out;
+}
+function arrIndexOf(items, where) {
+  const mainEnd = (() => {
+    const at2 = items.indexOf(":tail");
+    return at2 < 0 ? items.length : at2;
+  })();
+  if (where == null || where === "end") return mainEnd;
+  if (where === "start") return 0;
+  if (where === "tail") return items.length;
+  if (typeof where === "number") {
+    let seen = 0;
+    for (let i = 0; i < items.length; i++) {
+      if (!isButtonItem(items[i])) continue;
+      if (seen === Math.max(0, Math.floor(where))) return i;
+      seen++;
+    }
+    return mainEnd;
+  }
+  const after = !!(where && typeof where === "object" && where.after);
+  const name = String(typeof where === "string" ? where : (after ? where.after : where.before) || "");
+  const at = items.indexOf(name);
+  if (at < 0) return mainEnd;
+  return after ? at + 1 : at;
 }
 function buildStatusbar(editor) {
   const chars = h("b", { text: "0" });
@@ -4710,7 +4850,7 @@ function previewHtml(html) {
   });
   return root.innerHTML;
 }
-const version = "1.0.1";
+const version = "1.0.2";
 function create(target, options = {}) {
   return new KEditor(target, options);
 }
@@ -4740,6 +4880,7 @@ export {
   mount,
   normalizeCustomButtons,
   normalizeItems,
+  normalizePosition,
   replace,
   sanitizeHtml,
   simpleAdapter,
