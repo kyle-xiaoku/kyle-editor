@@ -1,6 +1,6 @@
 {
   "name": "kyle-editor",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "轻量、美观的微信公众号风格富文本编辑器（纯前端，支持图片/视频分片上传、HTML 源码模式），可通过 <script> 引入或作为 Vue 3 组件安装。",
   "type": "module",
   "main": "./dist/keditor.cjs",
