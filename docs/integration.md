@@ -4,7 +4,7 @@ KEditor 是**纯前端**编辑器，不依赖任何后端接口。三种集成�
 
 | 方式 | 适用场景 | 引入文件 |
 |------|----------|----------|
-| Script（UMD） | 静态页、jQuery/Vue2 老项目、快速原型 | `dist/keditor.umd.js` |
+| Script（UMD） | 静态页、jQuery/Vue2 老项目、快速原型 | `dist/keditor.umd.min.js`（调试可用未压缩的 `keditor.umd.js`） |
 | ESM / 打包器 | Vite、Webpack、Rollup、Next/Nuxt（客户端组件） | `import { KEditor } from 'kyle-editor'` |
 | Vue 3 组件 | Vue 3 项目，`v-model` 双向绑定 | `import KEditorVue from 'kyle-editor/vue'` |
 
@@ -24,7 +24,8 @@ KEditor 是**纯前端**编辑器，不依赖任何后端接口。三种集成�
   <body>
     <div id="editor"></div>
 
-    <script src="dist/keditor.umd.js"></script>
+    <!-- 线上用压缩版（139 KB / gzip 43 KB）；断点调试换成 dist/keditor.umd.js 即可，API 完全一致 -->
+    <script src="dist/keditor.umd.min.js"></script>
     <script>
       const editor = KEditor.create('#editor', {
         placeholder: '开始撰写内容…',

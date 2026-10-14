@@ -57,7 +57,7 @@ npm view kyle-editor version
 
 ### 不需要改的东西
 
-`dist/` 下的**文件名**（`keditor.es.js` / `keditor.umd.js` / `keditor-vue.es.js`）和**全局变量名**（`window.KEditor`、`window.KEditorVue`）与包名无关，保持不变 —— 改它们会连带影响 `<script>` 引入方式和 CDN 路径。
+`dist/` 下的**文件名**（`keditor.es.js` / `keditor.umd.js` / `keditor.umd.min.js` / `keditor-vue.es.js`）和**全局变量名**（`window.KEditor`、`window.KEditorVue`）与包名无关，保持不变 —— 改它们会连带影响 `<script>` 引入方式和 CDN 路径。
 
 以后若要再改名，同步这 4 处即可：`package.json.name`、`src/vue/index.js` 的 import、`vite.config.vue.js` 的 `external`/`globals`、文档里的包说明符（`dist` 文件名与 `KEditor` 全局名不动）。
 
@@ -74,8 +74,8 @@ npm view kyle-editor version
   // 三种模块格式的入口，兼容 ESM / CJS / 浏览器
   "main":    "./dist/keditor.cjs",   // require()
   "module":  "./dist/keditor.es.js",    // 打包器优先
-  "unpkg":   "./dist/keditor.umd.js",   // <script src="https://unpkg.com/…">
-  "jsdelivr":"./dist/keditor.umd.js",
+  "unpkg":   "./dist/keditor.umd.min.js",   // <script src="https://unpkg.com/…"> → CDN 默认给压缩版
+  "jsdelivr":"./dist/keditor.umd.min.js",
   "types":   "./types/index.d.ts",
 
   // 子路径导出：keditor 与 keditor/vue 分别解析
@@ -121,10 +121,12 @@ npm view kyle-editor version
 
 | 命令 | 作用 |
 |------|------|
-| `npm run build` | 产出 `dist/` 6 个文件 |
-| `npm run verify` | build + 171 项冒烟测试 + 4 个 demo 页健康检查（含自定义按钮真实交互探针）+ 类型校验 |
-| `npm run test:package` | 校验包名/exports 路径/`.cjs` 后缀/裸说明符一致性（62 项） |
-| `npm run test:install` | **打 tarball → 隔离目录全新安装 → headless Chrome 跑 63 项消费者用例**（UMD/ESM/Vue 三条集成路径） |
+| `npm run build` | 产出 `dist/` 7 个文件（es / cjs / umd / **umd.min** / vue×3） |
+| `npm run build:min` | 只重建 `dist/keditor.umd.min.js` |
+| `npm run verify` | build + 171 项冒烟（**未压缩 + 压缩各跑一遍**）+ 4 个 demo 页健康检查（含自定义按钮真实交互探针）+ 类型校验 + 发布配置校验 |
+| `npm run test:min` | 同一套冒烟改用 `dist/keditor.umd.min.js`（`test/smoke.html?bundle=min`） |
+| `npm run test:package` | 校验包名/exports 路径/`.cjs` 后缀/裸说明符/**压缩产物与 CDN 入口**一致性（75 项） |
+| `npm run test:install` | **打 tarball → 隔离目录全新安装 → headless Chrome 跑 66 项消费者用例**（UMD 未压缩+压缩双产物 / ESM / Vue 三条集成路径，含 Node 侧共 79 项） |
 | `npm run pack:check` | build + 一致性校验，并打印**将要发布的文件清单与体积**（不发布） |
 | `npm run release` | 自动先跑 `prerelease`(=verify + test:install) 再 `npm publish` |
 | `npm run release:beta` | 发到 `beta` 标签，不影响 `latest` |
@@ -215,8 +217,12 @@ npm publish --access public --otp=123456
 
 - 包页面：`https://www.npmjs.com/package/<包名>`（作用域包为 `/package/@scope/name`）
 - CDN 自动可用（发布后约 1–2 分钟生效）：
-  - `https://unpkg.com/<包名>/dist/keditor.umd.js`
-  - `https://cdn.jsdelivr.net/npm/<包名>/dist/keditor.umd.js`
+  - `https://unpkg.com/<包名>` → 自动解析到 `unpkg` 字段指向的 `dist/keditor.umd.min.js`
+  - `https://unpkg.com/<包名>/dist/keditor.umd.min.js`（压缩，139 KB / gzip 43 KB）
+  - `https://unpkg.com/<包名>/dist/keditor.umd.js`（未压缩，209 KB，调试用）
+  - `https://cdn.jsdelivr.net/npm/<包名>/dist/keditor.umd.min.js`
+
+> 两份 UMD 产物同源构建（`vite.config.core.js` 出未压缩版，`vite.config.min.js` 出 `.min` 版），全局名、导出清单、`KEditor.version` 完全一致；`npm run verify` 会对**两份产物各跑一遍** 171 项冒烟，`npm run test:install` 还会比对二者的导出清单，防止 minify 丢导出。
 
 ### 4.1 先发 beta 试水
 
@@ -288,7 +294,7 @@ createApp(App).use(KEditorVue).mount('#app')
 ### 6.2 零构建（`<script>` / CDN）
 
 ```html
-<script src="https://unpkg.com/keditor/dist/keditor.umd.js"></script>
+<script src="https://unpkg.com/kyle-editor/dist/keditor.umd.min.js"></script>
 <script>
   const editor = KEditor.create('#editor', { height: 460 })
 </script>
@@ -370,7 +376,8 @@ jobs:
 | 装上了但 `Cannot find module 'kyle-editor/vue'` | `exports` 子路径写错或 `dist` 没进 `files` → `npm run pack:check` 核对 |
 | 安装后样式丢失 | `sideEffects` 被设成 `false` 导致注入代码被摇掉 → 保持 `true` |
 | `EBADENGINE` 警告 | 用户 Node 低于 `engines.node` → 调低或让用户升级 Node |
-| CDN 拿不到最新文件 | unpkg/jsdelivr 有缓存 → `https://unpkg.com/kyle-editor@1.0.1/dist/keditor.umd.js` 锁定版本 |
+| CDN 拿不到最新文件 | unpkg/jsdelivr 有缓存 → `https://unpkg.com/kyle-editor@1.0.3/dist/keditor.umd.min.js` 锁定版本 |
+| CDN 404 / 拿不到 `.min` 文件 | `vite.config.min.js` 没被 `build` 脚本调用，或 `dist` 没进 `files` → `npm run test:package`（校验 unpkg/jsdelivr 目标存在且比未压缩版小）+ `npm run test:install`（校验 tarball 内入口可达） |
 | `require('kyle-editor')` 得到空对象 `{}` | `type: module` 的包里 CJS 产物用了 `.js` 后缀，Node 按最近 package.json 当成 ESM 解析 → CJS 产物必须是 `.cjs`（本项目已修，`npm run test:package` 会校验） |
 | 服务端渲染报 `document is not defined` | 编辑器只能在浏览器运行 → Next.js 用 `'use client'` + `dynamic(..., { ssr: false })`，Nuxt 用 `.client` 插件 + `<ClientOnly>`，详见 `docs/integration.md` §3.5 |
 | Vue 里用了组件但渲染出**空白且无任何报错** | 把默认导出当成普通对象传给 `h()` 时会渲染成 `<!---->`。本包的默认导出是**自带 `install` 的组件**，`app.use(KEditorVue)` 与 `<KEditorVue />` 两种写法都可用；若仍异常，改用显式具名导出 `import { KEditorVue } from 'kyle-editor/vue'`。`npm run test:install` 会回归这两种写法 |

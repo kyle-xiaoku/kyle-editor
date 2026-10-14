@@ -110,6 +110,30 @@ for (const doc of ['README.md', 'docs/integration.md', 'docs/api.md']) {
 ok(read('README.md').includes(`npm install ${pkg.name}`), 'README 含正确的安装命令')
 ok(existsSync(join(root, 'LICENSE')), 'LICENSE 文件存在')
 
+// 8.5 压缩产物（CDN 默认入口）：必须存在、必须比未压缩版小、必须保留 UMD 全局名
+const umd = 'dist/keditor.umd.js'
+const umdMin = 'dist/keditor.umd.min.js'
+if (!existsSync(join(root, umd))) {
+  ok(false, `${umd} 已构建`)
+} else if (!existsSync(join(root, umdMin))) {
+  ok(false, `${umdMin} 已构建（npm run build 应产出压缩版）`)
+} else {
+  const raw = read(umd)
+  const min = read(umdMin)
+  ok(Buffer.byteLength(min) < Buffer.byteLength(raw),
+    `${umdMin} 确实比未压缩版小`, `min=${Buffer.byteLength(min)} raw=${Buffer.byteLength(raw)}`)
+  ok(/\.KEditor=/.test(min) || /KEditor\s*=\s*\{\}/.test(min),
+    `${umdMin} 保留全局名 window.KEditor`)
+  ok(pkg.unpkg === `./${umdMin}`, 'unpkg 指向压缩产物', pkg.unpkg)
+  ok(pkg.jsdelivr === `./${umdMin}`, 'jsdelivr 指向压缩产物', pkg.jsdelivr)
+}
+// define 注入失败时占位符会原样留在产物里（构建仍成功，运行时才炸）
+for (const f of ['dist/keditor.es.js', 'dist/keditor.cjs', umd, umdMin,
+  'dist/keditor-vue.es.js', 'dist/keditor-vue.cjs', 'dist/keditor-vue.umd.js']) {
+  if (!existsSync(join(root, f))) continue
+  ok(!read(f).includes('__KEDITOR_VERSION__'), `${f} 无未注入的 __KEDITOR_VERSION__ 占位符`)
+}
+
 // 9. 发布脚本可用
 for (const s of ['build', 'verify', 'pack:check', 'release', 'prerelease']) {
   ok(!!pkg.scripts?.[s], `scripts.${s} 已定义`)
@@ -118,6 +142,8 @@ for (const s of ['build', 'verify', 'pack:check', 'release', 'prerelease']) {
 ok((pkg.scripts?.release || '').includes('--access public'), 'release 带 --access public')
 ok((pkg.scripts?.prerelease || '').includes('verify'), 'prerelease 会先跑 verify')
 ok((pkg.scripts?.release || '').includes('registry.npmjs.org'), 'release 写死 npmjs 官方源（避开只读镜像）')
+ok((pkg.scripts?.build || '').includes('vite.config.min.js'), 'build 会产出压缩产物')
+ok((pkg.scripts?.verify || '').includes('test:min'), 'verify 会跑压缩产物冒烟（避免发布未验证的 CDN 入口）')
 
 console.log(`\n发布配置校验：${pass} 项通过${fails.length ? `，${fails.length} 项失败` : ''}`)
 if (fails.length) {

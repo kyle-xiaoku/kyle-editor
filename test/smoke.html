@@ -29,7 +29,15 @@
       </div>
     </main>
 
-    <script src="../dist/keditor.umd.js"></script>
+    <script>
+      // ?bundle=min → 改用压缩产物跑同一套用例，验证 minify 没有改变行为
+      // 取值只有两个分支的常量，不存在注入面
+      var BUNDLE = /[?&]bundle=min\b/.test(location.search)
+        ? '../dist/keditor.umd.min.js'
+        : '../dist/keditor.umd.js'
+      window.__TEST_BUNDLE__ = BUNDLE
+      document.write('<scr' + 'ipt src="' + BUNDLE + '"></scr' + 'ipt>')
+    </script>
     <script>
       const results = document.getElementById('results')
       const summary = document.getElementById('summary')

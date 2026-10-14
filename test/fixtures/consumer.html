@@ -14,6 +14,11 @@
 
 <!-- 路径 1：UMD <script> 引入 -->
 <script src="node_modules/kyle-editor/dist/keditor.umd.js"></script>
+<script>window.__UMD_RAW = window.KEditor</script>
+<!-- 压缩产物（unpkg/jsdelivr 的实际入口）后加载，window.KEditor 最终指向它，
+     后面的用例跑的正是 CDN 用户拿到的那份代码 -->
+<script src="node_modules/kyle-editor/dist/keditor.umd.min.js"></script>
+<script>window.__UMD_MIN = window.KEditor</script>
 <script src="node_modules/vue/dist/vue.global.prod.js"></script>
 <script src="node_modules/kyle-editor/dist/keditor-vue.umd.js"></script>
 
@@ -26,6 +31,21 @@ window.__RESULT = { done: false, results }
 /* ---------------- 1. UMD 全局 ---------------- */
 ok('UMD 全局 KEditor 存在', typeof window.KEditor === 'object' && typeof window.KEditor.create === 'function')
 ok('UMD version 可读', !!window.KEditor.version, window.KEditor && window.KEditor.version)
+
+/* ------- 1b. 压缩产物：必须与未压缩产物行为等价 ------- */
+ok('压缩产物同样暴露 window.KEditor',
+   typeof window.__UMD_MIN === 'object' && typeof window.__UMD_MIN.create === 'function')
+{
+  const keys = (o) => Object.keys(o || {}).sort().join(',')
+  const rawKeys = keys(window.__UMD_RAW)
+  const minKeys = keys(window.__UMD_MIN)
+  ok('压缩产物导出清单与未压缩版一致（minify 未丢导出）',
+     !!rawKeys && rawKeys === minKeys,
+     rawKeys === minKeys ? `${minKeys.split(',').length} 个导出` : `raw=${rawKeys} | min=${minKeys}`)
+  ok('压缩产物 version 与未压缩版一致',
+     window.__UMD_MIN && window.__UMD_MIN.version === (window.__UMD_RAW || {}).version,
+     `${(window.__UMD_RAW || {}).version} / ${window.__UMD_MIN && window.__UMD_MIN.version}`)
+}
 
 /* ---------------- 2. 真实创建 + 文档承诺的 API ---------------- */
 let editor = null

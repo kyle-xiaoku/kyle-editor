@@ -42,6 +42,17 @@ execFileSync('npm', ['install', tarball, 'vue@3', '--no-audit', '--no-fund', `--
 const installed = JSON.parse(await readFile(join(INSTALL, 'node_modules/kyle-editor/package.json'), 'utf8'))
 log(`  已安装 ${installed.name}@${installed.version}`)
 
+// ---------- 2a. tarball 是否真的带上了 CDN 入口（files 白名单漏配时这里就会暴露）----------
+const PKGDIR = join(INSTALL, 'node_modules/kyle-editor')
+const pkgFileFails = []
+for (const key of ['unpkg', 'jsdelivr', 'main', 'module', 'types']) {
+  const rel = installed[key]
+  const hit = !!rel && existsSync(join(PKGDIR, rel))
+  log(`  ${hit ? 'OK  ' : 'FAIL'} 包内 ${key} 目标存在 :: ${rel}`)
+  if (!hit) pkgFileFails.push(`${key} → ${rel}`)
+}
+if (pkgFileFails.length) log(`  ⚠ tarball 缺失入口：${pkgFileFails.join('；')}`)
+
 // ---------- 2b. Node 侧模块解析（CJS require / ESM import）----------
 // 浏览器用例覆盖不到 Node 的解析规则，而 `type: module` + `.cjs` 后缀曾出过导出全丢的事故
 await writeFile(
@@ -186,4 +197,4 @@ if (nodeFailed.length) {
   nodeFailed.forEach((r) => log(`  - ${r.name}${r.extra ? ' :: ' + r.extra : ''}`))
 }
 log(`\n安装可用性总计：${passed}/${total} 通过（Node ${nodeResults.length} + 浏览器 ${payload ? payload.total : 0}）`)
-process.exit(nodeFailed.length || browserFailed ? 1 : 0)
+process.exit(nodeFailed.length || browserFailed || pkgFileFails.length ? 1 : 0)

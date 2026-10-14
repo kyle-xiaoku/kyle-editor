@@ -5,8 +5,8 @@
   "type": "module",
   "main": "./dist/keditor.cjs",
   "module": "./dist/keditor.es.js",
-  "unpkg": "./dist/keditor.umd.js",
-  "jsdelivr": "./dist/keditor.umd.js",
+  "unpkg": "./dist/keditor.umd.min.js",
+  "jsdelivr": "./dist/keditor.umd.min.js",
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
@@ -32,16 +32,18 @@
     "node": ">=16"
   },
   "scripts": {
-    "build": "vite build --config vite.config.core.js && vite build --config vite.config.vue.js",
+    "build": "vite build --config vite.config.core.js && vite build --config vite.config.vue.js && vite build --config vite.config.min.js",
+    "build:min": "vite build --config vite.config.min.js",
     "dev": "python3 -m http.server 5178 --bind 127.0.0.1",
     "test": "node test/run-headless.mjs",
+    "test:min": "node test/run-headless.mjs \"http://127.0.0.1:5178/test/smoke.html?bundle=min\"",
     "test:pages": "node test/check-page.mjs",
     "test:types": "node test/check-types.mjs",
     "test:package": "node test/check-package.mjs",
     "test:install": "node test/check-install.mjs",
     "test:visual": "node test/shoot.mjs rich,uploading,bubble,resize,align,source,preview,color,heading,media,link,custom,customload,customerr,posbtn,wide,widefix,scroll,scroll2,http://127.0.0.1:5178/demo/vue.html",
     "clean": "rm -rf dist",
-    "verify": "npm run build && npm test && npm run test:pages && npm run test:types && npm run test:package",
+    "verify": "npm run build && npm test && npm run test:min && npm run test:pages && npm run test:types && npm run test:package",
     "pack:check": "npm run build && npm run test:package && npm pack --dry-run",
     "prerelease": "npm run verify && npm run test:install",
     "release": "npm publish --access public --registry=https://registry.npmjs.org",

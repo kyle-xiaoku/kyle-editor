@@ -2,7 +2,7 @@
 
 轻量、美观的**微信公众号风格富文本编辑器**。纯前端实现，无任何后端依赖：图片/视频走**分片上传**（并发、重试、取消、秒传、断点续传），随时切换 **HTML 源码模式**查看或改写产物。支持 `<script>` 直接引入与 Vue 3 安装集成。
 
-- 体积：`dist/keditor.umd.js` 约 209 KB（gzip 55 KB），零运行时依赖，样式随 JS 注入
+- 体积：`dist/keditor.umd.min.js` 约 139 KB（gzip 43 KB），未压缩版 209 KB（gzip 55 KB），零运行时依赖，样式随 JS 注入
 - 版式：677px 正文版心、17px/1.75 行距，与公众号观感一致；**宽屏下版心自动生长**，两侧留白恒定，不会留出一大块空白
 - 安全：标签/属性白名单净化，拦截 `on*`、`javascript:`、`script/iframe`
 
@@ -30,7 +30,9 @@ npm install kyle-editor vue@^3
 或直接用 CDN（无需安装）：
 
 ```html
-<script src="https://unpkg.com/kyle-editor/dist/keditor.umd.js"></script>
+<!-- unpkg / jsdelivr 默认入口就是压缩版，下面两种写法等价 -->
+<script src="https://unpkg.com/kyle-editor"></script>
+<script src="https://unpkg.com/kyle-editor/dist/keditor.umd.min.js"></script>
 ```
 
 > 零运行时依赖；样式随 JS 注入，**不需要额外引入 CSS**。Vue 是可选 peerDependency，只用核心 API 的项目不会被强制安装。
@@ -41,8 +43,9 @@ npm install kyle-editor vue@^3
 
 ```html
 <div id="editor"></div>
-<script src="https://unpkg.com/kyle-editor/dist/keditor.umd.js"></script>
-<!-- 本地开发时也可用相对路径：<script src="dist/keditor.umd.js"></script> -->
+<script src="https://unpkg.com/kyle-editor/dist/keditor.umd.min.js"></script>
+<!-- 本地开发时也可用相对路径：<script src="dist/keditor.umd.min.js"></script>
+     调试想看未压缩代码就换成 dist/keditor.umd.js（全局变量、API 完全一致） -->
 <script>
   const editor = KEditor.create('#editor', {
     placeholder: '开始撰写内容，支持拖拽 / 粘贴图片与视频…',
@@ -275,16 +278,37 @@ editor.paperOptions()  // { width, mode, gap, maxWidth }
 
 ```bash
 npm install
-npm run build          # 产出 dist/（es + cjs + umd，含 Vue 版本）
+npm run build          # 产出 dist/（es + cjs + umd + umd.min，含 Vue 版本）
+npm run build:min      # 只重建压缩版 dist/keditor.umd.min.js
 npm run dev            # 静态服务 http://127.0.0.1:5178
 ```
+
+### 构建产物
+
+| 文件 | 用途 | 体积 |
+| --- | --- | --- |
+| `dist/keditor.umd.min.js` | **CDN / `<script>` 默认入口**（`unpkg`、`jsdelivr` 均指向它） | 139 KB / gzip 43 KB |
+| `dist/keditor.umd.js` | 同上但未压缩，便于断点调试 | 209 KB / gzip 55 KB |
+| `dist/keditor.es.js` | ESM（`exports.import`，打包器走这个） | 199 KB |
+| `dist/keditor.cjs` | CommonJS（`exports.require`） | 200 KB |
+| `dist/keditor-vue.{es,cjs,umd}.js` | Vue 组件/插件，外部化 `vue` 与本包 | 各约 4 KB |
+
+两份 UMD 产物由 `vite.config.core.js`（未压缩）与 `vite.config.min.js`（`minify: 'esbuild'`）从同一入口分别构建，全局变量都是 `window.KEditor`，API 完全一致。
 
 ## 验证
 
 ```bash
-npm run build
-npm run dev &                                    # 启动静态服务
+npm run dev &          # 先启动静态服务（测试页面走 http://127.0.0.1:5178）
+
+npm run verify         # build + 冒烟(未压缩) + 冒烟(压缩) + 页面检查 + 类型 + 发布配置
+npm test               # 171 项冒烟，跑 dist/keditor.umd.js
+npm run test:min       # 同一套 171 项冒烟，跑 dist/keditor.umd.min.js
+npm run test:pages     # demo / 首页零控制台错误 + 真实交互探针
+npm run test:install   # npm pack → 隔离安装 → 校验包内入口与压缩产物等价性
+npm run test:visual    # 20 张关键状态截图（test/screenshots/）
 ```
+
+> `test` 与 `test:min` 复用同一个 `test/smoke.html`，靠 `?bundle=min` 切换被测产物 —— 压缩版任何行为差异都会在这里暴露；`test:install` 还会对比两份 UMD 的导出清单，防止 minify 丢导出。
 
 ## 已知限制
 
