@@ -25,9 +25,9 @@
   "files": [
     "dist",
     "types",
+    "imgs",
     "README.md",
-    "LICENSE",
-    "imgs"
+    "LICENSE"
   ],
   "engines": {
     "node": ">=16"

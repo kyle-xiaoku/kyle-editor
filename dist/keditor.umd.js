@@ -4854,7 +4854,7 @@
     });
     return root.innerHTML;
   }
-  const version = "1.0.4";
+  const version = "1.0.5";
   function create(target, options = {}) {
     return new KEditor(target, options);
   }
