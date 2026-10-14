@@ -58,7 +58,7 @@ const pages = [
     need: '.ke-content',
     label: 'Vue3 Demo',
     probe: openCustom('column'),
-    expect: (r) => r.btn && r.rows === 5 && !r.err,
+    expect: (r) => r.btn && r.rows === 5 && !r.err && r.place === 'after-link' && r.paper === 'paper-ok',
   },
 ]
 

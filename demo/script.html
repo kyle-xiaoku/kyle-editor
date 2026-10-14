@@ -125,6 +125,33 @@
         upload: { chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
         image: { compress: { maxWidth: 1600, quality: 0.85 } },
         maxVideoSize: 200 * 1024 * 1024,
+        // 自定义工具栏按钮：未显式配置 toolbar 时会自动追加到默认工具栏
+        customButtons: [
+          {
+            name: 'column',
+            text: '栏目',
+            title: '插入栏目链接（数据从接口读取）',
+            note: '接口数据',
+            position: { after: 'link' }, // 不写则默认追加到主区末尾
+            searchable: true,
+            url: 'assets/columns.json', // 自动识别 { code, data: { list: [...] } } 这类嵌套结构
+            link: true, // 直接用每项自带的地址（href / url 字段）
+            insert: 'link',
+          },
+          {
+            name: 'tpl',
+            text: '模板',
+            title: '插入模板链接（静态配置）',
+            searchable: true,
+            options: [
+              { value: 'opening', label: '开场白', desc: '问候 + 本期导读', group: '通用' },
+              { value: 'ending', label: '结束语', desc: '引导关注与转发', group: '通用' },
+              { value: 'qa', label: '答疑入口', desc: '跳转问卷', group: '互动' },
+            ],
+            // 链接模板：{value} / {label} 会被替换为所选项的字段
+            link: { url: 'https://mp.weixin.qq.com/s/tpl-{value}', text: '【{label}】', target: '_blank' },
+          },
+        ],
         onChange: () => {
           out.textContent = '（内容已变化，点「获取 HTML」查看完整结果）'
         },
