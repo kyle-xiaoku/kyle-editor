@@ -6,7 +6,10 @@
 - 版式：677px 正文版心、17px/1.75 行距，与公众号观感一致；**宽屏下版心自动生长**，两侧留白恒定，不会留出一大块空白
 - 安全：标签/属性白名单净化，拦截 `on*`、`javascript:`、`script/iframe`
 
-![img_1.png](img_1.png)
+![img_1.png](imgs/img_1.png)
+![img.png](imgs/img.png)
+![img_2.png](imgs/img_2.png)
+![img_3.png](imgs/img_3.png)
 
 ## 功能
 
