@@ -11,6 +11,9 @@
 ![img_2.png](imgs/img_2.png)
 ![img_3.png](imgs/img_3.png)
 
+## 文档
+* [快速开始](docs/index.md)
+
 ## 功能
 
 | 分类 | 能力 |
