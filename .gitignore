@@ -2,6 +2,7 @@ node_modules/
 uploads/
 .DS_Store
 .pack-verify/
+.scratch/
 *.tgz
 .idea
 .talkmed-agentpilot
