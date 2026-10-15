@@ -1,6 +1,5 @@
 node_modules/
 uploads/
-test/
 .DS_Store
 .pack-verify/
 *.tgz
