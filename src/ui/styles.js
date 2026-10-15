@@ -28,6 +28,9 @@ export const CSS = `
 }
 .ke[hidden] { display: none; }
 .ke-is-fullscreen { position: fixed; inset: 0; z-index: 9998; border-radius: 0; }
+/* 自适应高度（未配 height）：整页滚动；overflow:clip 不建立滚动容器，
+   工具栏的 sticky 才能相对视口生效（旧浏览器忽略 clip，退回 hidden 行为） */
+.ke.ke-is-auto { overflow: clip; }
 
 /* ---------------- Toolbar ---------------- */
 .ke-tb {
@@ -211,6 +214,56 @@ export const CSS = `
 .ke-panel-icon + .ke-panel-note { margin-left: 8px; }
 
 .ke-panel-select .ke-sel-search { margin-bottom: 8px; }
+.ke-code-panel .ke-sel-search { margin-bottom: 8px; }
+.ke-code-list { display: flex; flex-direction: column; max-height: 252px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+.ke-code-panel .ke-panel-hint { margin-top: 10px; }
+
+/* ---------------- Markdown 导入面板 ---------------- */
+/* 固定宽度：预览里的表格 / 长链接不再把弹层撑宽 */
+.ke-md-panel {
+  width: 372px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; padding-bottom: 0;
+  max-height: var(--ke-pop-max, 560px);
+}
+.ke-md-panel .ke-panel-head, .ke-md-panel .ke-tabs { flex: none; }
+.ke-md-panel .ke-tabs { margin-bottom: 0; }
+/* 中间区滚动、底部按钮常驻：窗口再矮也能点到「导入到正文」 */
+.ke-md-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -14px; padding: 12px 14px 0; }
+.ke-md-panel .ke-panel-foot { flex: none; margin: 10px 0 12px; }
+.ke-md-text {
+  width: 100%; min-height: 118px; max-height: 190px; padding: 10px 11px; border: 1px solid var(--ke-line);
+  border-radius: 8px; background: #fbfcfd; color: #1f2329; font-size: 12.5px; line-height: 1.7; resize: vertical;
+  font-family: 'SFMono-Regular', Consolas, Menlo, Monaco, monospace; outline: none;
+}
+.ke-md-text:focus { border-color: var(--ke-primary); background: #fff; }
+.ke-md-file { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ke-muted); }
+.ke-md-file b { flex: 1 1 auto; min-width: 0; color: #1f2329; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-md-file > span { flex: none; }
+.ke-drop-title, .ke-drop-sub { overflow-wrap: anywhere; }
+.ke-md-file[hidden] { display: none; }
+.ke-md-error { color: #e53e3e; }
+.ke-md-modes { display: flex; gap: 6px; }
+.ke-md-mode { flex: 1; height: 28px; border: 1px solid var(--ke-line); border-radius: 7px; background: #fff; color: #4b5158; font-size: 12px; cursor: pointer; }
+.ke-md-mode:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
+.ke-md-mode.ke-is-active { border-color: var(--ke-primary); background: var(--ke-primary-weak); color: var(--ke-primary); font-weight: 600; }
+/* 预览复用正文样式（ke-content），只是尺寸更紧凑 */
+.ke-md-preview {
+  max-height: 216px; overflow: auto; overscroll-behavior: contain;
+  padding: 10px 12px; border: 1px solid var(--ke-line-weak); border-radius: 8px; background: #fff;
+  font-size: 14px; line-height: 1.7; overflow-wrap: anywhere;
+}
+.ke-md-preview > *:last-child { margin-bottom: 0; }
+.ke-md-preview h1, .ke-md-preview h2, .ke-md-preview h3, .ke-md-preview h4 { margin: 12px 0 8px; font-size: 16px; }
+.ke-md-preview p { margin: 0 0 8px; }
+.ke-md-preview ul, .ke-md-preview ol { margin: 0 0 8px; padding-left: 20px; }
+.ke-md-preview blockquote { margin: 0 0 8px; padding: 1px 12px; }
+.ke-md-preview pre { margin: 0 0 8px; padding: 9px 11px; font-size: 12px; }
+.ke-md-preview table { font-size: 13px; }
+.ke-md-preview th, .ke-md-preview td { padding: 4px 7px; }
+.ke-md-empty { color: #b8bec7; font-size: 12.5px; }
+.ke-md-stats { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 8px; font-size: 11.5px; color: #a2a8b3; }
+.ke-md-stat b { color: #4b5158; font-weight: 600; }
+.ke-md-panel .ke-panel-hint { margin-top: 0; }
 .ke-sel-body { max-height: 268px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
 .ke-sel-row {
   display: flex; align-items: center; gap: 8px; width: 100%;
@@ -312,10 +365,36 @@ export const CSS = `
 .ke-content hr { border: 0; border-top: 1px solid var(--ke-line); margin: 24px 0; }
 .ke-content code { background: #f2f3f5; border-radius: 4px; padding: 2px 6px; font-size: 14px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; color: #c7254e; }
 .ke-content pre {
+  position: relative;
   background: #282c34; color: #e6e6e6; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
   font-size: 13px; line-height: 1.7; margin: 0 0 16px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
 }
 .ke-content pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+/* 右上角语言角标：纯 CSS（::before）不进入正文 DOM，导出到公众号时自然消失 */
+.ke-content pre[data-k-lang]:not([data-k-lang='plaintext'])::before {
+  content: attr(data-k-lang); position: absolute; top: 6px; right: 8px;
+  padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, .09); color: #8b93a1;
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; user-select: none;
+}
+/* 代码高亮 token（One Dark 配色，与深色底一致） */
+.ke-content .ke-tok-com { color: #7f848e; font-style: italic; }
+.ke-content .ke-tok-str { color: #98c379; }
+.ke-content .ke-tok-num { color: #d19a66; }
+.ke-content .ke-tok-kw { color: #c678dd; }
+.ke-content .ke-tok-typ { color: #e5c07b; }
+.ke-content .ke-tok-fn { color: #61afef; }
+.ke-content .ke-tok-var { color: #e06c75; }
+.ke-content .ke-tok-op { color: #56b6c2; }
+.ke-content .ke-tok-punc { color: #abb2bf; }
+.ke-content .ke-tok-tag { color: #e06c75; }
+.ke-content .ke-tok-attr { color: #d19a66; }
+.ke-content .ke-tok-sel { color: #e06c75; }
+.ke-content .ke-tok-prop { color: #61afef; }
+.ke-content .ke-tok-key { color: #e06c75; }
+.ke-content .ke-tok-bool { color: #d19a66; }
+.ke-content .ke-tok-meta { color: #c678dd; }
+.ke-content .ke-tok-ins { color: #98c379; }
+.ke-content .ke-tok-del { color: #e06c75; text-decoration: line-through; }
 .ke-content img, .ke-content video { max-width: 100%; height: auto; display: block; }
 .ke-content figure { margin: 0 0 16px; }
 .ke-content figcaption { font-size: 13px; color: var(--ke-muted); text-align: center; margin-top: 6px; }

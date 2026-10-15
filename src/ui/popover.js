@@ -1,6 +1,8 @@
-/** 工具栏弹层：颜色面板、段落样式、字号、表格规格、链接表单、图片/视频插入 */
-import { h } from '../core/utils.js'
+/** 工具栏弹层：颜色面板、段落样式、字号、表格规格、链接表单、图片/视频插入、Markdown 导入 */
+import { h, formatSize } from '../core/utils.js'
 import { icon } from '../core/icons.js'
+import { readMarkdownFile } from '../core/markdown.js'
+import { highlightCodeBlocks } from '../core/code.js'
 
 /* 颜色：分组 + 中文名称，hover 有 tooltip */
 const THEME_COLORS = [
@@ -42,6 +44,11 @@ export class Popover {
       if (event.key === 'Escape') this.close()
     }
     document.addEventListener('keydown', this.keyHandler)
+    // 视口尺寸变化后重新夹紧（否则窗口变大时面板还维持旧的高度上限）
+    this.resizeHandler = () => {
+      if (!this.el.hidden) this.place()
+    }
+    window.addEventListener('resize', this.resizeHandler)
   }
 
   open(anchor, build, { align = 'start', onClose } = {}) {
@@ -50,28 +57,50 @@ export class Popover {
     if (content) this.el.appendChild(content)
     this.el.hidden = false
     this.anchor = anchor
+    this.align = align
     this.onClose = onClose
-    const rootBox = this.root.getBoundingClientRect()
-    const box = anchor.getBoundingClientRect()
-    // 先渲染再定位，宽度依赖内容
-    const popBox = this.el.getBoundingClientRect()
-    let left = box.left - rootBox.left
-    if (align === 'center') left = box.left - rootBox.left + box.width / 2 - popBox.width / 2
-    if (align === 'end') left = box.right - rootBox.left - popBox.width
-    left = Math.max(8, Math.min(left, rootBox.width - popBox.width - 8))
-    let top = box.top - rootBox.top + box.height + 8
-    // 编辑区高度不足时向上翻转
-    if (top + popBox.height > rootBox.height - 8 && box.top - rootBox.top - popBox.height - 8 > 0) {
-      top = box.top - rootBox.top - popBox.height - 8
-    }
-    this.el.style.left = `${left}px`
-    this.el.style.top = `${top}px`
+    this.place()
     // 重新触发一次入场动画
     this.el.classList.remove('ke-pop-in')
     void this.el.offsetWidth
     this.el.classList.add('ke-pop-in')
     const first = [...this.el.querySelectorAll('[data-k-autofocus]')].find((node) => node.offsetParent !== null)
     first?.focus?.()
+  }
+
+  /** 定位 + 高度夹紧：面板可以内部滚动，但底部按钮必须留在可视区内 */
+  place() {
+    const anchor = this.anchor
+    if (!anchor) return
+    this.el.style.removeProperty('--ke-pop-max')
+    const align = this.align
+    const rootBox = this.root.getBoundingClientRect()
+    const box = anchor.getBoundingClientRect()
+    // 可视带：自适应高度时 root 比视口高得多，按 root 高度判断会永不翻转
+    const visTop = Math.max(0, -rootBox.top)
+    const visBottom = Math.min(rootBox.height, window.innerHeight - rootBox.top)
+    // 先渲染再定位，宽度依赖内容
+    const popBox = this.el.getBoundingClientRect()
+    let left = box.left - rootBox.left
+    if (align === 'center') left = box.left - rootBox.left + box.width / 2 - popBox.width / 2
+    if (align === 'end') left = box.right - rootBox.left - popBox.width
+    left = Math.max(8, Math.min(left, rootBox.width - popBox.width - 8))
+    const below = box.top - rootBox.top + box.height + 8
+    const aboveTop = box.top - rootBox.top - 8
+    const band = Math.max(0, visBottom - visTop - 16)
+    const roomBelow = visBottom - 8 - below
+    const roomAbove = aboveTop - visTop
+    // 下方空间足够（≥320）优先贴按钮下方；否则整条可视带，避免面板被压得太矮
+    const room = roomBelow >= 320 ? Math.min(roomBelow, band) : band
+    const height = Math.max(180, Math.min(popBox.height, room))
+    if (height < popBox.height) this.el.style.setProperty('--ke-pop-max', `${Math.round(height)}px`)
+    let top
+    if (height <= roomBelow) top = below
+    else if (roomAbove > roomBelow && height <= roomAbove) top = aboveTop - height
+    else top = visBottom - 8 - height
+    top = Math.max(visTop, Math.min(top, Math.max(visTop, visBottom - 8 - height)))
+    this.el.style.left = `${left}px`
+    this.el.style.top = `${top}px`
   }
 
   close() {
@@ -92,6 +121,7 @@ export class Popover {
   destroy() {
     document.removeEventListener('mousedown', this.docHandler, true)
     document.removeEventListener('keydown', this.keyHandler)
+    window.removeEventListener('resize', this.resizeHandler)
     this.el.remove()
   }
 }
@@ -111,6 +141,269 @@ function section(label) {
 
 function divider() {
   return h('div.ke-panel-divider')
+}
+
+/* ---------------------------- 代码块语言面板 ---------------------------- */
+
+/** 语言选择：列表可搜索，回车选第一项；已选语言带勾选态 */
+export function codePanel({ languages, value, editing, onPick }) {
+  const wrap = panel(editing ? '代码块语言' : '插入代码块')
+  wrap.classList.add('ke-panel-wide', 'ke-code-panel')
+  const note = h('span.ke-panel-note')
+  wrap.querySelector('.ke-panel-head').appendChild(note)
+
+  const search = h('input.ke-input.ke-sel-search', {
+    type: 'search',
+    placeholder: '搜索语言，如 js / python',
+    'data-k-autofocus': '',
+  })
+  wrap.appendChild(search)
+  const body = h('div.ke-code-list')
+  wrap.appendChild(body)
+  wrap.appendChild(h('div.ke-panel-hint', {
+    text: editing ? '切换后会立即重新高亮当前代码块' : '插入后点「代码块」按钮可随时切换语言',
+  }))
+
+  let visible = languages
+
+  function render() {
+    const keyword = search.value.trim().toLowerCase()
+    visible = keyword
+      ? languages.filter((item) => `${item.label} ${item.hint} ${item.value}`.toLowerCase().includes(keyword))
+      : languages
+    note.textContent = keyword ? `${visible.length} / ${languages.length} 种` : `${languages.length} 种语言`
+    body.textContent = ''
+    if (!visible.length) {
+      body.appendChild(h('div.ke-sel-tip', {}, [h('span.ke-sel-tip-text', { text: `没有匹配「${search.value.trim()}」的语言` })]))
+      return
+    }
+    visible.forEach((item) => {
+      const row = h('button.ke-sel-row', {
+        type: 'button',
+        dataset: { kLang: item.value },
+        onclick: () => onPick(item.value),
+      }, [
+        h('span.ke-sel-main', {}, [
+          h('span.ke-sel-label', { text: item.label }),
+          h('span.ke-sel-desc', { text: item.hint }),
+        ]),
+      ])
+      if (item.value === value) {
+        row.classList.add('ke-is-active')
+        row.appendChild(h('span.ke-sel-check', { html: icon('check') }))
+      }
+      body.appendChild(row)
+    })
+  }
+
+  search.addEventListener('input', render)
+  search.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    if (visible.length) onPick(visible[0].value)
+  })
+  render()
+  return wrap
+}
+
+/* ---------------------------- Markdown 导入面板 ---------------------------- */
+
+/**
+ * Markdown 导入：选文件 / 粘贴文本 → 预览 → 按落点导入
+ * @param {{ insertMode?:string, accept?:string, maxText?:string, highlight?:boolean,
+ *           onConvert:(text:string)=>{html:string,summary:object},
+ *           onImport:(payload:{text:string,name:string,mode:string})=>Promise<boolean>|boolean }} config
+ */
+export function markdownPanel({ insertMode = 'replace', accept = '', maxText = '', highlight = true, onConvert, onImport }) {
+  const wrap = panel('导入 Markdown')
+  wrap.classList.add('ke-panel-wide', 'ke-md-panel')
+  const note = h('span.ke-panel-note', { text: '尚未选择文件' })
+  wrap.querySelector('.ke-panel-head').appendChild(note)
+
+  const state = { text: '', name: '', mode: insertMode, picked: false }
+
+  /* —— 顶部页签 —— */
+  const local = h('div.ke-tab-body')
+  const pasteBody = h('div.ke-tab-body', { hidden: true })
+  const tabs = h('div.ke-tabs', {}, [
+    h('button.ke-tab', { type: 'button', text: '选择文件' }),
+    h('button.ke-tab', { type: 'button', text: '粘贴文本' }),
+  ])
+  const show = (index) => {
+    ;[...tabs.children].forEach((tab, i) => tab.classList.toggle('ke-is-active', i === index))
+    local.hidden = index !== 0
+    pasteBody.hidden = index !== 1
+    if (index === 1) textarea.focus()
+  }
+  tabs.children[0].addEventListener('click', () => show(0))
+  tabs.children[1].addEventListener('click', () => show(1))
+
+  /* —— 选文件 —— */
+  const input = h('input', { type: 'file', accept, hidden: true, style: { display: 'none' } })
+  const fileRow = h('div.ke-md-file', { hidden: true })
+  const drop = h('div.ke-drop', {}, [
+    h('span.ke-drop-ico', { html: icon('upload') }),
+    h('div.ke-drop-title', { text: '点击选择 .md 文件，或拖拽到此处' }),
+    h('div.ke-drop-sub', { text: [maxText, '支持 .md / .markdown / .txt，自动识别 UTF-8 与 GBK'].filter(Boolean).join(' · ') }),
+  ])
+  drop.addEventListener('click', () => input.click())
+  drop.addEventListener('dragover', (event) => {
+    event.preventDefault()
+    drop.classList.add('ke-is-over')
+  })
+  drop.addEventListener('dragleave', () => drop.classList.remove('ke-is-over'))
+  drop.addEventListener('drop', (event) => {
+    event.preventDefault()
+    drop.classList.remove('ke-is-over')
+    const file = event.dataTransfer?.files?.[0]
+    if (file) loadFile(file)
+  })
+  input.addEventListener('change', () => {
+    const file = input.files?.[0]
+    input.value = ''
+    if (file) loadFile(file)
+  })
+
+  async function loadFile(file) {
+    try {
+      const text = await readMarkdownFile(file)
+      state.text = text
+      state.name = file.name || ''
+      state.picked = true
+      fileRow.hidden = false
+      fileRow.textContent = ''
+      fileRow.append(
+        h('b', { text: file.name || '未命名' }),
+        h('span', { text: `${formatSize(file.size)} · ${text.length} 字符` }),
+      )
+      schedule()
+    } catch (error) {
+      state.text = ''
+      fileRow.hidden = false
+      fileRow.textContent = ''
+      fileRow.appendChild(h('span.ke-md-error', { text: `读取失败：${error.message}` }))
+      render()
+    }
+  }
+  local.append(drop, input, fileRow)
+
+  /* —— 粘贴文本 —— */
+  const textarea = h('textarea.ke-md-text', {
+    placeholder: '# 标题\n\n正文段落，支持 **加粗**、列表、表格、```js 代码块 ...',
+    spellcheck: 'false',
+  })
+  pasteBody.appendChild(textarea)
+
+  /* —— 落点模式 —— */
+  const MODES = [
+    ['replace', '替换全文'],
+    ['append', '追加文末'],
+    ['cursor', '插入光标'],
+  ]
+  const modeRow = h('div.ke-md-modes')
+  const modeText = { replace: '清空正文后导入（可撤销）', append: '保留正文，追加到末尾', cursor: '插入到当前光标位置' }
+  MODES.forEach(([value, label]) => {
+    const button = h('button.ke-md-mode', { type: 'button', title: modeText[value], text: label })
+    button.classList.toggle('ke-is-active', value === state.mode)
+    button.addEventListener('click', () => {
+      state.mode = value
+      ;[...modeRow.children].forEach((node) => node.classList.toggle('ke-is-active', node === button))
+    })
+    modeRow.appendChild(button)
+  })
+
+  /* —— 预览 —— */
+  const preview = h('div.ke-md-preview.ke-content')
+  const stats = h('div.ke-md-stats')
+  const importer = h('button.ke-btn-primary', { type: 'button', text: '导入到正文', disabled: true })
+
+  let converted = { html: '', summary: null }
+  let timer = null
+
+  function schedule() {
+    clearTimeout(timer)
+    timer = setTimeout(render, 180)
+  }
+
+  function convert() {
+    const text = state.text
+    if (!text.trim()) return { html: '', summary: null }
+    try {
+      return onConvert(text) || { html: '', summary: null }
+    } catch (error) {
+      return { html: '', summary: null, error }
+    }
+  }
+
+  function render() {
+    const result = convert()
+    converted = result
+    const empty = !state.text.trim()
+    importer.disabled = empty || !result.html || !!result.error
+    note.textContent = empty ? '尚未选择文件' : `${state.text.length} 字符`
+    preview.textContent = ''
+    stats.textContent = ''
+    if (result.error) {
+      preview.appendChild(h('div.ke-md-empty', { text: `转换失败：${result.error.message}` }))
+      return
+    }
+    if (empty) {
+      preview.appendChild(h('div.ke-md-empty', { text: '选择文件或粘贴 Markdown 后，这里会显示转换预览' }))
+      return
+    }
+    preview.innerHTML = result.html
+    if (highlight) highlightCodeBlocks(preview, { highlight: true })
+    const summary = result.summary || {}
+    const items = [
+      ['标题', summary.headings],
+      ['段落', summary.paragraphs],
+      ['列表', summary.lists],
+      ['代码块', summary.codeBlocks],
+      ['引用', summary.quotes],
+      ['表格', summary.tables],
+      ['图片', summary.images],
+      ['链接', summary.links],
+    ].filter(([, count]) => count)
+    items.forEach(([label, count]) => {
+      stats.appendChild(h('span.ke-md-stat', {}, [h('b', { text: String(count) }), ` ${label}`]))
+    })
+    if (!items.length) stats.appendChild(h('span.ke-md-stat', { text: '未识别到块级结构，将按纯文本导入' }))
+  }
+
+  textarea.addEventListener('input', () => {
+    state.text = textarea.value
+    state.name = ''
+    schedule()
+  })
+
+  importer.addEventListener('click', async () => {
+    if (importer.disabled) return
+    importer.disabled = true
+    importer.textContent = '导入中…'
+    try {
+      await onImport({ text: state.text, name: state.name, mode: state.mode })
+    } finally {
+      importer.textContent = '导入到正文'
+      importer.disabled = !state.text.trim()
+    }
+  })
+
+  wrap.append(
+    tabs,
+    h('div.ke-md-body', {}, [
+      local,
+      pasteBody,
+      h('div.ke-panel-sect', { text: '导入位置' }),
+      modeRow,
+      h('div.ke-panel-sect', { text: '转换预览' }),
+      preview,
+      stats,
+    ]),
+    h('div.ke-panel-foot', {}, [importer, h('span.ke-panel-hint', { text: '转换后为可直接编辑的 HTML' })]),
+  )
+  show(0)
+  render()
+  return wrap
 }
 
 /* ---------------------------- 颜色面板 ---------------------------- */

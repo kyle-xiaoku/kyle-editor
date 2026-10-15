@@ -69,6 +69,15 @@ const out = {
   vueDefaultInstall: typeof (v.default && v.default.install),
   vueCompSetup: typeof (v.KEditorVue && v.KEditorVue.setup),
   vuePluginInstall: typeof (v.KEditorPlugin && v.KEditorPlugin.install),
+  codeLangs: typeof c.listLanguages === 'function' ? c.listLanguages().length : -1,
+  codeHighlight: typeof c.highlightCode,
+  codeSample: typeof c.highlightCode === 'function' ? /ke-tok-kw/.test(c.highlightCode('const a = 1', 'js')) : false,
+  codeNorm: typeof c.normalizeLang === 'function' ? c.normalizeLang('MySQL') : '',
+  mdH1: typeof c.markdownToHtml === 'function' ? c.markdownToHtml('# 标题', { sanitize: false }) : '',
+  mdMode: typeof c.normalizeInsertMode === 'function' ? c.normalizeInsertMode('bad') : '',
+  mdFile: typeof c.isMarkdownFile === 'function' ? c.isMarkdownFile({ name: 'a.md', type: '' }) : null,
+  mdSummary: typeof c.markdownSummary === 'function' ? c.markdownSummary('<h1>a</h1><table></table>').tables : -1,
+  mdAccept: typeof c.MARKDOWN_ACCEPT === 'string' ? c.MARKDOWN_ACCEPT.length : -1,
 }
 process.stdout.write(JSON.stringify(out))`,
 )
@@ -78,6 +87,11 @@ await writeFile(
 import def, { KEditorVue, KEditorPlugin } from 'kyle-editor/vue'
 process.stdout.write(JSON.stringify({
   coreKeys: Object.keys(c).length,
+  codeLangs: typeof c.listLanguages === 'function' ? c.listLanguages().length : -1,
+  codeHighlight: typeof c.highlightCode,
+  mdH1: typeof c.markdownToHtml === 'function' ? c.markdownToHtml('# 标题', { sanitize: false }) : '',
+  mdFile: typeof c.isMarkdownFile === 'function' ? c.isMarkdownFile({ name: 'a.txt', type: 'text/plain' }) : null,
+  mdAccept: typeof c.MARKDOWN_ACCEPT === 'string' ? c.MARKDOWN_ACCEPT.length : -1,
   coreDefault: typeof c.default,
   vueDefaultName: def && def.name,
   vueDefaultSetup: typeof (def && def.setup),
@@ -109,6 +123,18 @@ for (const [fmt, file] of [
     nodeCase('CJS vue 导出清单完整', o.vueKeys === 'KEditor,KEditorPlugin,KEditorVue,default,useKEditor', o.vueKeys)
     nodeCase('CJS vue 具名导出 KEditorVue 为组件', o.vueCompSetup === 'function')
     nodeCase('CJS vue KEditorPlugin.install 存在', o.vuePluginInstall === 'function')
+  }
+  // 代码块 API 是纯字符串处理，Node 侧也应可用（当前端构建漏导出时会在这里暴露）
+  nodeCase(`${fmt} 代码块语言清单可达（20 种）`, o.codeLangs === 20, `langs=${o.codeLangs}`)
+  nodeCase(`${fmt} highlightCode 纯字符串可用`, o.codeHighlight === 'function' && (fmt === 'CJS' ? o.codeSample === true : true), `type=${o.codeHighlight}`)
+  if (fmt === 'CJS') nodeCase('CJS 语言别名归一正确', o.codeNorm === 'sql', `normalizeLang('MySQL')=${o.codeNorm}`)
+  // Markdown 转换是纯字符串处理，Node 侧也应可用（漏导出时在这里暴露）
+  nodeCase(`${fmt} markdownToHtml 纯字符串可用`, o.mdH1 === '<h1>标题</h1>', JSON.stringify(o.mdH1))
+  nodeCase(`${fmt} isMarkdownFile 可用`, o.mdFile === true, String(o.mdFile))
+  nodeCase(`${fmt} MARKDOWN_ACCEPT 导出`, o.mdAccept > 10, String(o.mdAccept))
+  if (fmt === 'CJS') {
+    nodeCase('CJS normalizeInsertMode 归一', o.mdMode === 'replace', o.mdMode)
+    nodeCase('CJS markdownSummary 可统计', o.mdSummary === 1, String(o.mdSummary))
   }
   nodeCase(`${fmt} vue 默认导出为组件（自带 setup）`, o.vueDefaultSetup === 'function', `name=${o.vueDefaultName}`)
   nodeCase(`${fmt} vue 默认导出自带 install`, o.vueDefaultInstall === 'function')

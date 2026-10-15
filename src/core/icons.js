@@ -25,6 +25,8 @@ export const icons = {
   video: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m10.5 9 4.5 3-4.5 3z"/></svg>`,
   table: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M3 15h18M9 5v14M15 5v14"/></svg>`,
   code: S('m9 7-5 5 5 5M15 7l5 5-5 5'),
+  // 导入托盘 + 下箭头：17px 下仍清晰，且不与相邻线性图标抢视线
+  markdown: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8v10.4m0 0-4.2-4.2M12 14.2l4.2-4.2"/><path d="M4.2 15.4v2.4a2 2 0 0 0 2 2h11.6a2 2 0 0 0 2-2v-2.4"/></svg>`,
   hr: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16" stroke-width="2.4"/><path d="M6 7h12M6 17h12" opacity=".45"/></svg>`,
   clear: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20 4 16l8-8 4 4-8 8z" /><path d="M12 8 16 4l4 4-4 4M6 20h12"/></svg>`,
   source: S('m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16'),

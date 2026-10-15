@@ -39,16 +39,64 @@
         <h3>小标题</h3>
         <blockquote>「好的编辑器应当让人专注于内容本身。」</blockquote>
         <ul><li>拖拽 / 粘贴即可上传</li><li>大文件自动分片，失败自动重试</li></ul>
-        <ol><li>选择文件</li><li>分片并发传输</li><li>合并返回地址</li></ol>
+        <ol><li>选择文件</li><li>分片并发传输</li><li>接口返回 url 即完成</li></ol>
         <table><tbody>
           <tr><th>能力</th><th>说明</th></tr>
           <tr><td>分片上传</td><td>默认 1MB/片，可配并发与重试</td></tr>
           <tr><td>源码模式</td><td>格式化、复制、可直接改写</td></tr>
         </tbody></table>
-        <pre><code>const editor = KEditor.create('#editor', {\n  uploader: { type: 'http', initUrl: '/api/upload/init' }\n})</code></pre>
+        <pre><code>const editor = KEditor.create('#editor', {\n  uploader: '/api/upload',\n  chunkUploader: '/api/chunk-upload'\n})</code></pre>
         <p>再看一个<A href="https://mp.weixin.qq.com" target="_blank" rel="noopener noreferrer">外链</A>与分割线：</p>
         <hr>
         <p style="text-align:center"><span style="color:#8a8f99">居中说明文字</span></p>`
+
+      // 代码块展示内容（语言标记会由编辑器识别，并按语言高亮）
+      const CODE_SAMPLE = `
+        <h3>代码块：按语言高亮</h3>
+        <p>同一段内容换个语言选择，配色与分词完全不同，右上角显示语言角标。</p>
+        <pre data-k-lang="javascript"><code>// 分片上传：接口返回 url 即完成
+const editor = KEditor.create('#editor', {
+  chunkUploader: '/api/chunk-upload',
+  upload: { chunkSize: 1024 * 1024, concurrency: 3 }
+})</code></pre>
+        <pre data-k-lang="python"><code>def summarize(rows):
+    \"\"\"按栏目聚合\"\"\"
+    return {k: sum(v) for k, v in rows}
+
+print(summarize({'技术': 12}))</code></pre>
+        <pre data-k-lang="sql"><code>SELECT channel, COUNT(*) AS total
+FROM articles
+WHERE created_at &gt;= '2026-01-01'
+GROUP BY channel;</code></pre>
+        <pre data-k-lang="bash"><code>npm install kyle-editor
+npm run build && npm run verify</code></pre>`
+
+      // Markdown 导入截图用：真实调用引擎转出来的 HTML，截的就是用户会看到的正文
+      const MD_HTML = KEditor.markdownToHtml(`# 发布说明
+
+KEditor **1.0.7** 新增了「导入 Markdown」：把 .md 文件或粘贴的文本一次性转成可直接编辑的公众号正文。
+
+## 支持的语法
+
+- 标题 / 段落 / 加粗 / 斜体 / 删除线
+- 有序、无序、嵌套与任务列表
+- 表格（含列对齐）、引用、分割线
+- 围栅代码块（语言保留并高亮）
+
+| 入口 | 说明 |
+| --- | --- |
+| 工具栏 | 尾部「导入MD」按钮 |
+| 拖拽 | 把 .md 拖进编辑区 |
+| 接口 | editor.importMarkdown(text) |
+
+> 转换后的内容就是普通 HTML，可以继续排版、编辑、导出。
+
+\`\`\`js
+const res = await editor.importMarkdown('# 标题', { mode: 'replace' })
+console.log(res.summary) // { headings: 1, ... }
+\`\`\`
+
+---`, { linkTarget: true })
 
       // 仅自定义按钮相关的截图状态才挂这些按钮，避免扰动其他状态的截图
       const CUSTOM_STATES = ['custom', 'customload', 'customerr']
@@ -93,8 +141,8 @@
         height: 520,
         placeholder: '开始撰写内容…',
         // 上传中状态故意限速，便于截图观察分片进度
-        uploader: state === 'uploading' ? KEditor.mockAdapter({ speed: 0.5, latency: 420 }) : 'mock',
-        upload: { chunkSize: 200 * 1024, concurrency: 3 },
+        chunkUploader: state === 'uploading' ? KEditor.mockAdapter({ speed: 0.5, latency: 420 }) : 'mock',
+        upload: { mode: state === 'uploading' ? 'chunk' : 'auto', chunkSize: 200 * 1024, concurrency: 3 },
         image: { compress: false },
         paperMode: state === 'widefix' ? 'fixed' : 'fluid',
         customButtons,
@@ -221,6 +269,29 @@
           document.getElementById('desc').textContent = '自定义下拉按钮：接口失败提示 + 重试'
           editor.toolbar.openCustom('column')
           await new Promise((r) => setTimeout(r, 700))
+        } else if (state === 'code') {
+          document.getElementById('desc').textContent = '代码块：语法高亮 + 右上角语言角标（JavaScript / Python / SQL / Bash）'
+          editor.setContent(CODE_SAMPLE)
+          editor.scrollEl.scrollTop = 0
+        } else if (state === 'codepanel') {
+          document.getElementById('desc').textContent = '代码块语言面板：20 种语言，支持按名称/别名搜索（js、mysql、yml…）'
+          editor.setContent('<p>光标在代码块内时，选择语言即改写当前块的显示语言。</p>')
+          editor.toolbar.openCode()
+          await new Promise((r) => setTimeout(r, 260))
+        } else if (state === 'markdown') {
+          document.getElementById('desc').textContent = 'Markdown 导入结果：标题 / 列表 / 表格 / 引用 / 代码块（语言保留并高亮）'
+          editor.setContent(MD_HTML)
+          editor.scrollEl.scrollTop = 0
+        } else if (state === 'markdownpanel') {
+          document.getElementById('desc').textContent = 'Markdown 导入面板：选择文件 / 粘贴文本，三种落点 + 实时预览与结构统计'
+          editor.toolbar.openMarkdown()
+          await new Promise((r) => setTimeout(r, 200))
+          const mdPop = editor.popover.el
+          mdPop.querySelectorAll('.ke-tab')[1].click()
+          const mdText = mdPop.querySelector('.ke-md-text')
+          mdText.value = '# 周报\n\n本周完成 **Markdown 导入**：\n\n- 工具栏 / 拖拽 / 接口三种入口\n- 表格、引用、任务列表\n\n| 入口 | 落点 |\n| --- | :-: |\n| 面板 | 可选 |\n\n```js\neditor.importMarkdown(text)\n```'
+          mdText.dispatchEvent(new Event('input'))
+          await new Promise((r) => setTimeout(r, 400))
         } else if (state === 'preview') {
           document.getElementById('desc').textContent = '预览模式（电脑屏宽 677px）'
           editor.openPreview()

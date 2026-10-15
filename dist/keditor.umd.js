@@ -30,6 +30,9 @@
 }
 .ke[hidden] { display: none; }
 .ke-is-fullscreen { position: fixed; inset: 0; z-index: 9998; border-radius: 0; }
+/* 自适应高度（未配 height）：整页滚动；overflow:clip 不建立滚动容器，
+   工具栏的 sticky 才能相对视口生效（旧浏览器忽略 clip，退回 hidden 行为） */
+.ke.ke-is-auto { overflow: clip; }
 
 /* ---------------- Toolbar ---------------- */
 .ke-tb {
@@ -213,6 +216,56 @@
 .ke-panel-icon + .ke-panel-note { margin-left: 8px; }
 
 .ke-panel-select .ke-sel-search { margin-bottom: 8px; }
+.ke-code-panel .ke-sel-search { margin-bottom: 8px; }
+.ke-code-list { display: flex; flex-direction: column; max-height: 252px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+.ke-code-panel .ke-panel-hint { margin-top: 10px; }
+
+/* ---------------- Markdown 导入面板 ---------------- */
+/* 固定宽度：预览里的表格 / 长链接不再把弹层撑宽 */
+.ke-md-panel {
+  width: 372px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; padding-bottom: 0;
+  max-height: var(--ke-pop-max, 560px);
+}
+.ke-md-panel .ke-panel-head, .ke-md-panel .ke-tabs { flex: none; }
+.ke-md-panel .ke-tabs { margin-bottom: 0; }
+/* 中间区滚动、底部按钮常驻：窗口再矮也能点到「导入到正文」 */
+.ke-md-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -14px; padding: 12px 14px 0; }
+.ke-md-panel .ke-panel-foot { flex: none; margin: 10px 0 12px; }
+.ke-md-text {
+  width: 100%; min-height: 118px; max-height: 190px; padding: 10px 11px; border: 1px solid var(--ke-line);
+  border-radius: 8px; background: #fbfcfd; color: #1f2329; font-size: 12.5px; line-height: 1.7; resize: vertical;
+  font-family: 'SFMono-Regular', Consolas, Menlo, Monaco, monospace; outline: none;
+}
+.ke-md-text:focus { border-color: var(--ke-primary); background: #fff; }
+.ke-md-file { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ke-muted); }
+.ke-md-file b { flex: 1 1 auto; min-width: 0; color: #1f2329; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-md-file > span { flex: none; }
+.ke-drop-title, .ke-drop-sub { overflow-wrap: anywhere; }
+.ke-md-file[hidden] { display: none; }
+.ke-md-error { color: #e53e3e; }
+.ke-md-modes { display: flex; gap: 6px; }
+.ke-md-mode { flex: 1; height: 28px; border: 1px solid var(--ke-line); border-radius: 7px; background: #fff; color: #4b5158; font-size: 12px; cursor: pointer; }
+.ke-md-mode:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
+.ke-md-mode.ke-is-active { border-color: var(--ke-primary); background: var(--ke-primary-weak); color: var(--ke-primary); font-weight: 600; }
+/* 预览复用正文样式（ke-content），只是尺寸更紧凑 */
+.ke-md-preview {
+  max-height: 216px; overflow: auto; overscroll-behavior: contain;
+  padding: 10px 12px; border: 1px solid var(--ke-line-weak); border-radius: 8px; background: #fff;
+  font-size: 14px; line-height: 1.7; overflow-wrap: anywhere;
+}
+.ke-md-preview > *:last-child { margin-bottom: 0; }
+.ke-md-preview h1, .ke-md-preview h2, .ke-md-preview h3, .ke-md-preview h4 { margin: 12px 0 8px; font-size: 16px; }
+.ke-md-preview p { margin: 0 0 8px; }
+.ke-md-preview ul, .ke-md-preview ol { margin: 0 0 8px; padding-left: 20px; }
+.ke-md-preview blockquote { margin: 0 0 8px; padding: 1px 12px; }
+.ke-md-preview pre { margin: 0 0 8px; padding: 9px 11px; font-size: 12px; }
+.ke-md-preview table { font-size: 13px; }
+.ke-md-preview th, .ke-md-preview td { padding: 4px 7px; }
+.ke-md-empty { color: #b8bec7; font-size: 12.5px; }
+.ke-md-stats { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 8px; font-size: 11.5px; color: #a2a8b3; }
+.ke-md-stat b { color: #4b5158; font-weight: 600; }
+.ke-md-panel .ke-panel-hint { margin-top: 0; }
 .ke-sel-body { max-height: 268px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
 .ke-sel-row {
   display: flex; align-items: center; gap: 8px; width: 100%;
@@ -314,10 +367,36 @@
 .ke-content hr { border: 0; border-top: 1px solid var(--ke-line); margin: 24px 0; }
 .ke-content code { background: #f2f3f5; border-radius: 4px; padding: 2px 6px; font-size: 14px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; color: #c7254e; }
 .ke-content pre {
+  position: relative;
   background: #282c34; color: #e6e6e6; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
   font-size: 13px; line-height: 1.7; margin: 0 0 16px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
 }
 .ke-content pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+/* 右上角语言角标：纯 CSS（::before）不进入正文 DOM，导出到公众号时自然消失 */
+.ke-content pre[data-k-lang]:not([data-k-lang='plaintext'])::before {
+  content: attr(data-k-lang); position: absolute; top: 6px; right: 8px;
+  padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, .09); color: #8b93a1;
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; user-select: none;
+}
+/* 代码高亮 token（One Dark 配色，与深色底一致） */
+.ke-content .ke-tok-com { color: #7f848e; font-style: italic; }
+.ke-content .ke-tok-str { color: #98c379; }
+.ke-content .ke-tok-num { color: #d19a66; }
+.ke-content .ke-tok-kw { color: #c678dd; }
+.ke-content .ke-tok-typ { color: #e5c07b; }
+.ke-content .ke-tok-fn { color: #61afef; }
+.ke-content .ke-tok-var { color: #e06c75; }
+.ke-content .ke-tok-op { color: #56b6c2; }
+.ke-content .ke-tok-punc { color: #abb2bf; }
+.ke-content .ke-tok-tag { color: #e06c75; }
+.ke-content .ke-tok-attr { color: #d19a66; }
+.ke-content .ke-tok-sel { color: #e06c75; }
+.ke-content .ke-tok-prop { color: #61afef; }
+.ke-content .ke-tok-key { color: #e06c75; }
+.ke-content .ke-tok-bool { color: #d19a66; }
+.ke-content .ke-tok-meta { color: #c678dd; }
+.ke-content .ke-tok-ins { color: #98c379; }
+.ke-content .ke-tok-del { color: #e06c75; text-decoration: line-through; }
 .ke-content img, .ke-content video { max-width: 100%; height: auto; display: block; }
 .ke-content figure { margin: 0 0 16px; }
 .ke-content figcaption { font-size: 13px; color: var(--ke-muted); text-align: center; margin-top: 6px; }
@@ -584,6 +663,8 @@
     video: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m10.5 9 4.5 3-4.5 3z"/></svg>`,
     table: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M3 15h18M9 5v14M15 5v14"/></svg>`,
     code: S("m9 7-5 5 5 5M15 7l5 5-5 5"),
+    // 导入托盘 + 下箭头：17px 下仍清晰，且不与相邻线性图标抢视线
+    markdown: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8v10.4m0 0-4.2-4.2M12 14.2l4.2-4.2"/><path d="M4.2 15.4v2.4a2 2 0 0 0 2 2h11.6a2 2 0 0 0 2-2v-2.4"/></svg>`,
     hr: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16" stroke-width="2.4"/><path d="M6 7h12M6 17h12" opacity=".45"/></svg>`,
     clear: `<svg class="ke-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20 4 16l8-8 4 4-8 8z" /><path d="M12 8 16 4l4 4-4 4M6 20h12"/></svg>`,
     source: S("m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"),
@@ -604,6 +685,1757 @@
   };
   function icon(name) {
     return icons[name] || "";
+  }
+  const ALLOWED_TAGS = /* @__PURE__ */ new Set([
+    "a",
+    "abbr",
+    "b",
+    "blockquote",
+    "br",
+    "code",
+    "col",
+    "colgroup",
+    "dd",
+    "del",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "figcaption",
+    "figure",
+    "font",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "i",
+    "img",
+    "ins",
+    "kbd",
+    "li",
+    "mark",
+    "ol",
+    "p",
+    "pre",
+    "s",
+    "samp",
+    "section",
+    "small",
+    "span",
+    "strong",
+    "sub",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "u",
+    "ul",
+    "video",
+    "source"
+  ]);
+  const GLOBAL_ATTRS = /* @__PURE__ */ new Set(["style", "class"]);
+  const TAG_ATTRS = {
+    A: ["href", "title", "target", "rel"],
+    IMG: ["src", "alt", "title", "width", "height"],
+    VIDEO: ["src", "poster", "controls", "loop", "muted", "playsinline", "preload", "width", "height"],
+    SOURCE: ["src", "type"],
+    FONT: ["size", "color"],
+    TD: ["colspan", "rowspan"],
+    TH: ["colspan", "rowspan"],
+    OL: ["start"],
+    LI: ["value"]
+  };
+  const DATA_PREFIX = ["data-k-", "data-keditor-"];
+  const SAFE_URL_RE = /^(?:https?:|mailto:|tel:|blob:|\/|#|\.{1,2}\/|[^:]*$)/i;
+  const SAFE_DATA_RE = /^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);/i;
+  function isSafeUrl(url) {
+    if (!url) return false;
+    const value = String(url).trim().replace(/\s+/g, "");
+    if (/^(javascript|vbscript|file|about):/i.test(value)) return false;
+    if (value.startsWith("data:")) return SAFE_DATA_RE.test(value);
+    return SAFE_URL_RE.test(value);
+  }
+  function sanitizeStyle(value) {
+    const out = [];
+    for (const decl of String(value).split(";")) {
+      const idx = decl.indexOf(":");
+      if (idx < 0) continue;
+      const prop = decl.slice(0, idx).trim().toLowerCase();
+      const val = decl.slice(idx + 1).trim();
+      if (!prop || !val) continue;
+      if (!/^[a-z-]+$/.test(prop)) continue;
+      if (prop.startsWith("mso-") || prop.startsWith("-mso-")) continue;
+      if (/expression|javascript:|behavior:|url\(\s*['"]?\s*(javascript|data):/i.test(val)) continue;
+      out.push(`${prop}:${val}`);
+    }
+    return out.join(";");
+  }
+  function sanitizeClass(value) {
+    return String(value).split(/\s+/).filter((name) => /^[\w-]+$/.test(name) && !/^(script|javascript)/i.test(name)).join(" ");
+  }
+  function keepAttribute(tagName, attrName, attrValue) {
+    const name = attrName.toLowerCase();
+    if (name.startsWith("on")) return false;
+    if (GLOBAL_ATTRS.has(name)) return true;
+    if (DATA_PREFIX.some((prefix) => name.startsWith(prefix))) return true;
+    const list = TAG_ATTRS[tagName] || [];
+    return list.includes(name);
+  }
+  function sanitizeHtml(html, { allowEmpty = false } = {}) {
+    if (!html) return allowEmpty ? "" : "<p><br></p>";
+    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+    const root = doc.body.firstChild;
+    walk(root);
+    const result = root.innerHTML.trim();
+    if (!result && !allowEmpty) return "<p><br></p>";
+    return result;
+  }
+  function walk(node) {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === 8) {
+        child.remove();
+        continue;
+      }
+      if (child.nodeType === 3) continue;
+      if (child.nodeType !== 1) {
+        child.remove();
+        continue;
+      }
+      const tagName = child.tagName;
+      if (!ALLOWED_TAGS.has(tagName.toLowerCase())) {
+        if (tagName === "SCRIPT" || tagName === "STYLE" || tagName === "IFRAME" || tagName === "OBJECT" || tagName === "EMBED" || tagName === "FORM" || tagName === "LINK" || tagName === "META") {
+          child.remove();
+          continue;
+        }
+        const parent = child.parentNode;
+        while (child.firstChild) parent.insertBefore(child.firstChild, child);
+        parent.removeChild(child);
+        continue;
+      }
+      for (const attr of Array.from(child.attributes)) {
+        if (!keepAttribute(tagName, attr.name, attr.value)) {
+          child.removeAttribute(attr.name);
+          continue;
+        }
+        const lower = attr.name.toLowerCase();
+        if (lower === "style") child.setAttribute("style", sanitizeStyle(attr.value));
+        else if (lower === "class") {
+          const cls = sanitizeClass(attr.value);
+          if (cls) child.setAttribute("class", cls);
+          else child.removeAttribute("class");
+        } else if (lower === "href" || lower === "src" || lower === "poster") {
+          if (!isSafeUrl(attr.value)) child.removeAttribute(attr.name);
+        }
+      }
+      if (tagName === "A" && child.getAttribute("target") === "_blank") child.setAttribute("rel", "noopener noreferrer");
+      if (child.getAttribute("href") === "" || !child.getAttribute("href")) {
+        if (tagName === "A") child.removeAttribute("href");
+      }
+      walk(child);
+    }
+  }
+  const WORD_FONT_SIZES = { 1: 10, 2: 13, 3: 16, 4: 18, 5: 24, 6: 32, 7: 48 };
+  function isWordHtml(html) {
+    return /urn:schemas-microsoft-com|class=["']?Mso|ProgID|w:val=/i.test(html);
+  }
+  function cleanWordHtml(html) {
+    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+    const root = doc.body.firstChild;
+    root.querySelectorAll("*").forEach((node) => {
+      const tag = node.tagName.toLowerCase();
+      if (tag.startsWith("o:") || tag.startsWith("w:") || tag === "style" || tag === "script" || tag === "link" || tag === "meta") {
+        node.remove();
+        return;
+      }
+      if (tag === "img") {
+        const width = Number(node.getAttribute("width") || 0);
+        const height = Number(node.getAttribute("height") || 0);
+        if (width && width <= 3 || height && height <= 3) node.remove();
+        return;
+      }
+      if (tag === "font") {
+        const size = WORD_FONT_SIZES[Number(node.getAttribute("size"))];
+        const span = doc.createElement("span");
+        const styles = [];
+        if (size) styles.push(`font-size:${size}px`);
+        if (node.color) styles.push(`color:${node.color}`);
+        if (styles.length) span.setAttribute("style", styles.join(";"));
+        while (node.firstChild) span.appendChild(node.firstChild);
+        node.replaceWith(span);
+        return;
+      }
+      for (const attr of Array.from(node.attributes)) {
+        const name = attr.name.toLowerCase();
+        if (name.startsWith("mso-") || name === "class" || name.startsWith("_") || name.startsWith("w:") || name.startsWith("o:") || name === "lang" || name === "dir") {
+          node.removeAttribute(attr.name);
+        }
+      }
+    });
+    return root.innerHTML;
+  }
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+  }
+  function toPlainText(html) {
+    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+    doc.body.querySelectorAll("style,script").forEach((n) => n.remove());
+    doc.body.innerHTML = doc.body.innerHTML.replace(/<\/(p|div|h[1-6]|li|blockquote|pre|tr)>/gi, "\n");
+    return doc.body.textContent.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  const MAX_HIGHLIGHT_LENGTH = 6e4;
+  const LANGUAGE_DEFS = [
+    ["plaintext", "纯文本", ["text", "txt", "plain", "none"], "不做着色，保留原始排版"],
+    ["javascript", "JavaScript", ["js", "jsx", "mjs", "cjs", "node"], "前端与 Node 脚本"],
+    ["typescript", "TypeScript", ["ts", "tsx"], "带类型标注的 JS"],
+    ["html", "HTML / XML", ["xml", "svg", "vue", "htm", "markup"], "标签结构，内嵌 script / style 一并着色"],
+    ["css", "CSS", ["scss", "less", "sass", "styl"], "样式表，兼容 scss / less"],
+    ["json", "JSON", ["jsonc"], "配置与接口数据"],
+    ["python", "Python", ["py"], "脚本与数据处理"],
+    ["java", "Java", ["kotlin"], "后端与安卓"],
+    ["go", "Go", ["golang"], "服务端与云原生"],
+    ["rust", "Rust", ["rs"], "系统级语言"],
+    ["c", "C / C++", ["cpp", "c++", "h", "hpp", "cc", "objc"], "含预处理指令"],
+    ["csharp", "C#", ["cs", "dotnet"], ".NET 体系"],
+    ["php", "PHP", [], "含 <?php ?> 标记"],
+    ["ruby", "Ruby", ["rb"], "含符号与实例变量"],
+    ["sql", "SQL", ["mysql", "postgres", "postgresql", "sqlite", "pg"], "建表与查询语句"],
+    ["bash", "Shell / Bash", ["sh", "shell", "zsh", "console", "terminal"], "命令行与脚本"],
+    ["yaml", "YAML", ["yml"], "CI 与部署配置"],
+    ["ini", "INI / TOML", ["toml", "conf", "env", "properties"], "键值配置"],
+    ["markdown", "Markdown", ["md"], "文档与说明"],
+    ["diff", "Diff / Patch", ["patch"], "代码差异"]
+  ];
+  const LANGUAGES = LANGUAGE_DEFS.map(([value, label, aliases, hint]) => ({ value, label, aliases, hint }));
+  const LANGUAGE_LABELS = new Map(LANGUAGES.map((item) => [item.value, item.label]));
+  const LANGUAGE_ALIASES = /* @__PURE__ */ new Map();
+  for (const { value, aliases } of LANGUAGES) {
+    LANGUAGE_ALIASES.set(value, value);
+    for (const alias of aliases) LANGUAGE_ALIASES.set(alias, value);
+  }
+  function normalizeLang(lang) {
+    const key = String(lang || "").trim().toLowerCase();
+    return LANGUAGE_ALIASES.get(key) || "plaintext";
+  }
+  function languageLabel(lang) {
+    return LANGUAGE_LABELS.get(normalizeLang(lang)) || LANGUAGE_LABELS.get("plaintext");
+  }
+  function listLanguages(only) {
+    const pick2 = Array.isArray(only) && only.length ? new Set(only.map(normalizeLang)) : null;
+    const list = LANGUAGES.filter((item) => !pick2 || pick2.has(item.value));
+    return (list.length ? list : [LANGUAGES[0]]).map(({ value, label, hint }) => ({ value, label, hint }));
+  }
+  const SPACE = { re: /[^\S\n]+/y, cls: null };
+  const NEWLINE = { re: /\n/y, cls: null };
+  const BLANK = [SPACE, NEWLINE];
+  const IDENT = { re: /[A-Za-z_$][\w$]*/y, cls: null };
+  const NUM = {
+    re: /(?:0[xX][\da-fA-F](?:_?[\da-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|\d(?:_?\d)*(?:\.(?:\d(?:_?\d)*)?)?(?:[eE][+-]?\d+)?)[a-zA-Z]*/y,
+    cls: "num"
+  };
+  const C_TYPE = { re: /[A-Z][A-Za-z0-9_]*/y, cls: "typ" };
+  const CALL = { re: /[A-Za-z_$][\w$]*(?=\s*\()/y, cls: "fn" };
+  const PUNCT = { re: /[{}[\]();,.]+/y, cls: "op" };
+  const OP = { re: /[+\-*/%=!<>&|^~?:@]+/y, cls: "op" };
+  const BLOCK_COMMENT = { re: /\/\*[\s\S]*?(?:\*\/|$)/y, cls: "com" };
+  const LINE_COMMENT = { re: /\/\/[^\n]*/y, cls: "com" };
+  const DQ_STRING = { re: /"(?:\\[\s\S]|[^\\"\n])*"/y, cls: "str" };
+  const SQ_STRING = { re: /'(?:\\[\s\S]|[^\\'\n])*'/y, cls: "str" };
+  const C_STRING = [
+    DQ_STRING,
+    SQ_STRING,
+    { re: /`(?:\\[\s\S]|[^\\`])*`/y, cls: "str" }
+  ];
+  const kw = (words, flags = "y") => ({ re: new RegExp(`\\b(?:${words})\\b`, flags), cls: "kw" });
+  const typ = (words, flags = "y") => ({ re: new RegExp(`\\b(?:${words})\\b`, flags), cls: "typ" });
+  const bool = (words) => ({ re: new RegExp(`\\b(?:${words})\\b`, "y"), cls: "bool" });
+  const nameAfter = (words) => ({
+    re: /[A-Za-z_$][\w$]*/y,
+    cls: "fn",
+    when: (prev) => words.includes(prev)
+  });
+  const JS_BUILTINS = typ("Object|Array|String|Number|Boolean|Symbol|BigInt|Promise|Map|Set|WeakMap|WeakSet|RegExp|Date|Math|JSON|Error|AggregateError|TypeError|RangeError|SyntaxError|Function|Proxy|Reflect|Intl|console|window|document|globalThis|process|require|module|exports");
+  const RULES = {
+    plaintext: null,
+    javascript: [
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      { re: /`(?:\\[\s\S]|\$\{(?:[^{}]|\{[^{}]*\})*\}|[^\\`])*`/y, cls: "str" },
+      // 模板串（含简单插值）
+      DQ_STRING,
+      SQ_STRING,
+      { re: /\/(?![/*\s])(?:\\.|\[(?:\\.|[^\]\n])*\]|[^\\/\n])*\/[a-z]*/y, cls: "str" },
+      // 正则字面量
+      bool("true|false|null|undefined|NaN|Infinity"),
+      kw("break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|function|if|import|in|instanceof|let|new|return|super|switch|this|throw|try|typeof|var|void|while|with|yield|async|await|of|static|get|set|as|from|delete"),
+      JS_BUILTINS,
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    typescript: [
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      { re: /`(?:\\[\s\S]|\$\{(?:[^{}]|\{[^{}]*\})*\}|[^\\`])*`/y, cls: "str" },
+      DQ_STRING,
+      SQ_STRING,
+      bool("true|false|null|undefined|NaN|Infinity"),
+      kw("abstract|any|as|asserts|async|await|break|case|catch|class|const|constructor|continue|declare|default|delete|do|else|enum|export|extends|finally|for|from|function|get|if|implements|import|in|infer|instanceof|interface|is|keyof|let|namespace|new|of|private|protected|public|readonly|return|satisfies|set|static|super|switch|this|throw|try|type|typeof|unique|var|void|while|with|yield"),
+      JS_BUILTINS,
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    json: [
+      ...BLANK,
+      { re: /"(?:\\.|[^\\"\n])*"(?=\s*:)/y, cls: "key" },
+      { re: /"(?:\\.|[^\\"\n])*"/y, cls: "str" },
+      bool("true|false|null"),
+      NUM,
+      IDENT,
+      PUNCT
+    ],
+    css: [
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      { re: /@[\w-]+/y, cls: "kw" },
+      DQ_STRING,
+      SQ_STRING,
+      { re: /#[0-9a-fA-F]{3,8}\b/y, cls: "num" },
+      { re: /[\w-]+(?=\s*\()/y, cls: "fn" },
+      { re: /!important\b/y, cls: "kw" },
+      { re: /[\w-]+(?=\s*:)/y, cls: "prop" },
+      { re: /\.[a-zA-Z_-][\w-]*|#[\w-]+|::?[\w-]+|\[[^\]]*\]|\*|&/y, cls: "sel" },
+      { re: /\b\d+(?:\.\d+)?(?:px|em|rem|ex|ch|vh|vw|vmin|vmax|%|s|ms|deg|turn|fr|pt|cm|mm|in|dpi)\b/y, cls: "num" },
+      { re: /\b(?:solid|dashed|dotted|double|none|auto|absolute|relative|fixed|sticky|static|block|inline|inline-block|flex|grid|hidden|visible|inherit|initial|unset|currentColor|bold|italic|uppercase|lowercase|center|left|right|top|bottom|middle|wrap|nowrap|pointer|cursor|scroll|contain|cover)\b/y, cls: "typ" },
+      IDENT,
+      NUM,
+      OP,
+      PUNCT
+    ],
+    python: [
+      ...BLANK,
+      { re: /#[^\n]*/y, cls: "com" },
+      { re: /'''[\s\S]*?'''|"""[\s\S]*?"""/y, cls: "str" },
+      { re: /[rbfu]{0,2}'(?:\\.|[^\\'\n])*'|[rbfu]{0,2}"(?:\\.|[^\\"\n])*"/y, cls: "str" },
+      { re: /@[\w.]+/y, cls: "meta" },
+      bool("True|False|None"),
+      kw("and|as|assert|async|await|break|case|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|pass|raise|return|try|while|with|yield"),
+      typ("print|len|range|str|int|float|bool|list|dict|set|tuple|type|isinstance|enumerate|zip|map|filter|sorted|sum|min|max|abs|round|open|super|object|Exception|ValueError|TypeError|KeyError|IndexError|AttributeError|RuntimeError|StopIteration"),
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    java: [
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      C_STRING[0],
+      C_STRING[1],
+      { re: /@[\w.]+/y, cls: "meta" },
+      bool("true|false|null"),
+      kw("abstract|assert|break|case|catch|class|const|continue|default|do|else|enum|extends|final|finally|for|goto|if|implements|import|instanceof|interface|native|new|package|private|protected|public|record|return|sealed|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|var|volatile|while|yield"),
+      typ("boolean|byte|char|double|float|int|long|short|void|String|Integer|Long|Double|Float|Boolean|Character|Object|List|Map|Set|ArrayList|HashMap|HashSet|Optional|Stream|Override|Deprecated|System|Math|Thread|Exception|RuntimeException"),
+      nameAfter(["class", "interface", "enum", "record", "new"]),
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    go: [
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      { re: /`[^`]*`/y, cls: "str" },
+      DQ_STRING,
+      SQ_STRING,
+      bool("true|false|nil|iota"),
+      kw("break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var"),
+      typ("any|bool|byte|comparable|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr"),
+      nameAfter(["func", "type", "struct", "interface"]),
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    rust: [
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      DQ_STRING,
+      { re: /'(?:\\.|[^\\'])'/y, cls: "str" },
+      // 字符字面量（必须先于生命周期，否则 'a' 会被吃掉）
+      { re: /'[A-Za-z_]\w*/y, cls: "meta" },
+      // 生命周期 'a
+      { re: /(?:r|b)?#*"(?:\\[\s\S]|[^\\"])*"#*/y, cls: "str" },
+      { re: /#!?\[[^\]]*\]/y, cls: "meta" },
+      bool("true|false|None|Some|Ok|Err"),
+      kw("as|async|await|break|const|continue|crate|dyn|else|enum|extern|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|type|unsafe|use|where|while"),
+      typ("bool|char|f32|f64|i8|i16|i32|i64|i128|isize|str|u8|u16|u32|u64|u128|usize|String|Vec|Option|Result|Box|Rc|Arc|RefCell|HashMap|HashSet|BTreeMap|Self"),
+      nameAfter(["fn", "struct", "enum", "trait", "impl", "mod"]),
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    c: [
+      { re: /^[ \t]*#[ \t]*\w+[^\n]*/my, cls: "meta" },
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      C_STRING[0],
+      C_STRING[1],
+      bool("true|false|nullptr|NULL|stdin|stdout|stderr"),
+      kw("alignas|alignof|asm|auto|break|case|catch|class|const|constexpr|continue|decltype|default|delete|do|dynamic_cast|else|enum|explicit|export|extern|final|for|friend|goto|if|inline|mutable|namespace|new|noexcept|operator|override|private|protected|public|register|return|sizeof|static|static_cast|struct|switch|template|this|throw|try|typedef|typename|union|using|virtual|volatile|while"),
+      typ("bool|char|double|float|int|long|short|signed|unsigned|void|wchar_t|size_t|uint8_t|uint16_t|uint32_t|uint64_t|int8_t|int16_t|int32_t|int64_t|FILE|string|cout|cin|cerr|endl|std|vector|map|set"),
+      nameAfter(["struct", "class", "enum", "union", "namespace"]),
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    csharp: [
+      { re: /^[ \t]*#[ \t]*\w+[^\n]*/my, cls: "meta" },
+      ...BLANK,
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      { re: /\$?"(?:""|\\.|[^\\"\n])*"/y, cls: "str" },
+      C_STRING[1],
+      bool("true|false|null"),
+      kw("abstract|as|async|await|base|break|case|catch|checked|class|const|continue|default|delegate|do|else|enum|event|explicit|extern|finally|fixed|for|foreach|goto|if|implicit|in|interface|internal|is|lock|namespace|new|operator|out|override|params|private|protected|public|readonly|record|ref|return|sealed|sizeof|stackalloc|static|struct|switch|this|throw|try|typeof|unchecked|unsafe|using|var|virtual|volatile|when|where|while|yield"),
+      typ("bool|byte|char|decimal|double|dynamic|float|int|long|object|sbyte|short|string|uint|ulong|ushort|void|Task|List|Dictionary|IEnumerable|Action|Func|Exception|Console|String|Int32|Enumerable"),
+      nameAfter(["class", "struct", "interface", "enum", "namespace", "new"]),
+      C_TYPE,
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    php: [
+      ...BLANK,
+      { re: /<\?php|\?>|<\?=/y, cls: "meta" },
+      BLOCK_COMMENT,
+      LINE_COMMENT,
+      { re: /#[^\n]*/y, cls: "com" },
+      DQ_STRING,
+      SQ_STRING,
+      { re: /\$[A-Za-z_]\w*/y, cls: "var" },
+      bool("true|false|null|TRUE|FALSE|NULL"),
+      kw("abstract|and|array|as|break|callable|case|catch|class|clone|const|continue|declare|default|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|enum|extends|final|finally|fn|for|foreach|function|global|goto|if|implements|include|include_once|instanceof|insteadof|interface|isset|list|match|namespace|new|or|print|private|protected|public|readonly|require|require_once|return|static|switch|throw|trait|try|unset|use|var|while|xor|yield"),
+      typ("int|float|string|bool|array|object|mixed|void|iterable|self|parent|Closure|Exception|DateTime|stdClass|Countable|JsonSerializable|strlen|count|implode|explode|array_map|array_filter|sprintf|printf|json_encode|json_decode"),
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    ruby: [
+      { re: /^=begin[\s\S]*?^=end[^\n]*/my, cls: "com" },
+      ...BLANK,
+      { re: /#[^\n]*/y, cls: "com" },
+      DQ_STRING,
+      SQ_STRING,
+      { re: /%[wWiI][([{][^)\]}]*[)\]}]/y, cls: "str" },
+      { re: /@@?[A-Za-z_]\w*|\$[A-Za-z_]\w*/y, cls: "var" },
+      { re: /:[A-Za-z_]\w*[?!]?/y, cls: "typ" },
+      bool("true|false|nil|__FILE__|__LINE__"),
+      kw("alias|and|begin|break|case|class|def|defined|do|else|elsif|end|ensure|for|if|in|module|next|not|or|raise|redo|rescue|retry|return|self|super|then|undef|unless|until|when|while|yield|lambda|proc|new|attr_accessor|attr_reader|attr_writer|require|require_relative|include|extend|puts|print|p|loop|freeze|respond_to|instance_variable_get|send|tap|each|map|select|reject|reduce|inject|push|pop|shift|unshift|join|split|to_s|to_i|to_a|to_h|nil?|empty?"),
+      C_TYPE,
+      nameAfter(["def", "class", "module"]),
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    sql: [
+      ...BLANK,
+      { re: /--[^\n]*/y, cls: "com" },
+      BLOCK_COMMENT,
+      { re: /'[^']*(?:''[^']*)*'/y, cls: "str" },
+      { re: /"[^"]*"|`[^`]*`/y, cls: "var" },
+      { re: /\$\$[\s\S]*?\$\$/y, cls: "str" },
+      bool("true|false|null"),
+      kw("add|all|alter|and|as|asc|begin|between|by|case|cast|column|commit|constraint|create|cross|database|default|delete|desc|distinct|drop|else|end|except|exists|foreign|from|full|group|having|if|in|index|inner|insert|intersect|into|is|join|key|left|like|limit|not|null|offset|on|or|order|outer|primary|references|right|rollback|select|set|table|then|top|transaction|truncate|union|unique|update|values|view|when|where|with", "iy"),
+      typ("bigint|bit|blob|boolean|char|date|datetime|decimal|double|enum|float|int|integer|json|jsonb|longtext|numeric|real|serial|smallint|text|time|timestamp|tinyint|uuid|varchar|count|sum|avg|min|max|coalesce|nullif|now|current_date|current_timestamp|concat|substring|trim|upper|lower|length|round|abs|group_concat|string_agg|row_number|rank", "iy"),
+      CALL,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    bash: [
+      { re: /^#![^\n]*/my, cls: "meta" },
+      ...BLANK,
+      { re: /#[^\n]*/y, cls: "com" },
+      { re: /'[^']*'/y, cls: "str" },
+      { re: /\$?"(?:\\[\s\S]|[^\\"\n])*"/y, cls: "str" },
+      { re: /\$\{[^}\n]*\}|\$\(|\$[A-Za-z_]\w*|\$[0-9@*#?$!-]/y, cls: "var" },
+      kw("if|then|else|elif|fi|for|in|do|done|while|until|case|esac|function|select|time|return|local|export|declare|readonly|unset|shift|source|exit|trap|set|eval|exec|alias|break|continue"),
+      typ("echo|printf|read|cd|pwd|test|cat|ls|cp|mv|rm|mkdir|rmdir|touch|chmod|chown|grep|egrep|sed|awk|sort|uniq|head|tail|wc|cut|tr|xargs|find|which|curl|wget|git|npm|npx|yarn|pnpm|node|python|pip|docker|kubectl|ssh|scp|tar|zip|unzip|make|sudo|apt|brew|systemctl|journalctl|ps|kill|df|du|env|sleep|date|basename|dirname|realpath|mktemp"),
+      { re: /\{\d+(?:,\d*)?\}/y, cls: "num" },
+      NUM,
+      { re: /--?[A-Za-z][\w-]*/y, cls: "attr" },
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    yaml: [
+      { re: /^---[^\n]*|^\.\.\.[^\n]*/my, cls: "meta" },
+      { re: /^[ \t]*-[ \t]/my, cls: "kw" },
+      ...BLANK,
+      { re: /#[^\n]*/y, cls: "com" },
+      { re: /[|>][-+]?\d*\s*(?=\n|$)/y, cls: "meta" },
+      { re: new RegExp("(?<![\\w$])&[\\w.-]+|\\*[\\w.-]+", "y"), cls: "var" },
+      { re: /!!?[\w:.-]+/y, cls: "meta" },
+      bool("true|false|null|yes|no|on|off|True|False|Null|~"),
+      { re: /[\w$.-]+(?=\s*:(?:\s|$))/y, cls: "key" },
+      DQ_STRING,
+      SQ_STRING,
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    ini: [
+      ...BLANK,
+      { re: /[#;][^\n]*/y, cls: "com" },
+      { re: /\[[^\]\n]*\]/y, cls: "kw" },
+      { re: /"""[\s\S]*?"""|'''[\s\S]*?'''/y, cls: "str" },
+      DQ_STRING,
+      SQ_STRING,
+      bool("true|false|yes|no|on|off"),
+      { re: /[\w$.-]+(?=\s*=(?!=))/y, cls: "key" },
+      { re: /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?/y, cls: "num" },
+      NUM,
+      IDENT,
+      OP,
+      PUNCT
+    ],
+    markdown: [
+      { re: /^[ \t]*```[^\n]*\n[\s\S]*?^[ \t]*```[ \t]*$/my, cls: "str" },
+      { re: /^[ \t]*```[^\n]*/my, cls: "str" },
+      { re: /^#{1,6}[ \t][^\n]*/my, cls: "kw" },
+      { re: /^[ \t]*>[^\n]*/my, cls: "com" },
+      { re: /^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/my, cls: "com" },
+      { re: /^[ \t]*(?:[-*+][ \t]|\d+\.[ \t])/my, cls: "kw" },
+      ...BLANK,
+      { re: /!?\[[^\]\n]*\]\([^)\n]*\)/y, cls: "str" },
+      { re: /`[^`\n]+`/y, cls: "str" },
+      { re: /\*\*[^*\n]+\*\*|__[^_\n]+__/y, cls: "typ" },
+      { re: /\*[^*\n]+\*/y, cls: "var" },
+      { re: /https?:\/\/[^\s)]+/y, cls: "fn" },
+      { re: /<\/?[A-Za-z][^>\n]*>/y, cls: "tag" },
+      PUNCT
+    ],
+    diff: [
+      { re: /^(?:diff|index|new file|deleted file|similarity|rename|Binary files)[^\n]*/my, cls: "meta" },
+      { re: /^(?:---|\+\+\+)[^\n]*/my, cls: "meta" },
+      { re: /^@@[^\n]*/my, cls: "kw" },
+      { re: /^\+[^\n]*/my, cls: "ins" },
+      { re: /^-[^\n]*/my, cls: "del" },
+      { re: /^\\[^\n]*/my, cls: "com" },
+      ...BLANK,
+      IDENT,
+      PUNCT
+    ]
+  };
+  function scan(code, rules) {
+    let out = "";
+    let plain = "";
+    let prev = "";
+    let index = 0;
+    const flush = () => {
+      if (plain) {
+        out += escapeHtml(plain);
+        plain = "";
+      }
+    };
+    while (index < code.length) {
+      let hit = null;
+      let match = null;
+      for (const rule of rules) {
+        if (rule.when && !rule.when(prev)) continue;
+        rule.re.lastIndex = index;
+        const found = rule.re.exec(code);
+        if (found && found[0]) {
+          hit = rule;
+          match = found;
+          break;
+        }
+      }
+      if (!match) {
+        plain += code[index];
+        index += 1;
+        continue;
+      }
+      const text = match[0];
+      if (hit.cls) {
+        flush();
+        out += `<span class="ke-tok-${hit.cls}">${escapeHtml(text)}</span>`;
+      } else {
+        plain += text;
+      }
+      const trimmed = text.trim();
+      if (trimmed) prev = trimmed;
+      index += text.length;
+    }
+    flush();
+    return out;
+  }
+  const HTML_TAG_START = /<\/?([A-Za-z][\w:.-]*)/y;
+  function scanTag(code, start, out, emit) {
+    let index = start;
+    let closed = false;
+    while (index < code.length) {
+      const rest = code.slice(index);
+      let found = /^[\s]+/.exec(rest);
+      if (found) {
+        emit(null, found[0]);
+        index += found[0].length;
+        continue;
+      }
+      found = /^\/?>/.exec(rest);
+      if (found) {
+        emit("tag", found[0]);
+        index += found[0].length;
+        closed = true;
+        break;
+      }
+      found = /^[^\s=/>]+/.exec(rest);
+      if (found) {
+        emit("attr", found[0]);
+        index += found[0].length;
+        continue;
+      }
+      found = /^=/.exec(rest);
+      if (found) {
+        emit("op", found[0]);
+        index += found[0].length;
+        continue;
+      }
+      emit(null, code[index]);
+      index += 1;
+    }
+    return { index, closed };
+  }
+  function highlightHtml(code) {
+    let out = "";
+    let plain = "";
+    let index = 0;
+    const flush = () => {
+      if (plain) {
+        out += escapeHtml(plain);
+        plain = "";
+      }
+    };
+    const emit = (cls, text, raw = false) => {
+      if (cls) {
+        flush();
+        out += raw ? text : `<span class="ke-tok-${cls}">${escapeHtml(text)}</span>`;
+      } else {
+        plain += text;
+      }
+    };
+    while (index < code.length) {
+      const rest = code.slice(index);
+      let found = /^<!--[\s\S]*?(?:-->|$)/.exec(rest);
+      if (found) {
+        emit("com", found[0]);
+        index += found[0].length;
+        continue;
+      }
+      found = /^<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/.exec(rest);
+      if (found) {
+        emit("str", found[0]);
+        index += found[0].length;
+        continue;
+      }
+      found = /^<[!?][^>]*/.exec(rest);
+      if (found) {
+        emit("meta", found[0]);
+        index += found[0].length;
+        continue;
+      }
+      HTML_TAG_START.lastIndex = index;
+      found = HTML_TAG_START.exec(code);
+      if (found) {
+        emit("tag", found[0]);
+        index += found[0].length;
+        const tagName = found[1].toLowerCase();
+        const tag = scanTag(code, index, out, emit);
+        index = tag.index;
+        if (tag.closed && (tagName === "script" || tagName === "style")) {
+          const closeAt = code.toLowerCase().indexOf(`</${tagName}`, index);
+          if (closeAt > index) {
+            emit("raw", highlightCode(code.slice(index, closeAt), tagName === "script" ? "javascript" : "css"), true);
+            index = closeAt;
+          }
+        }
+        continue;
+      }
+      found = /^&[#\w]+;/.exec(rest);
+      if (found) {
+        emit("num", found[0]);
+        index += found[0].length;
+        continue;
+      }
+      plain += code[index];
+      index += 1;
+    }
+    flush();
+    return out;
+  }
+  function highlightCode(code, lang) {
+    const text = String(code == null ? "" : code);
+    const name = normalizeLang(lang);
+    if (name === "plaintext") return escapeHtml(text);
+    if (text.length > MAX_HIGHLIGHT_LENGTH) return escapeHtml(text);
+    if (name === "html") return highlightHtml(text);
+    const rules = RULES[name];
+    return rules ? scan(text, rules) : escapeHtml(text);
+  }
+  function isCodeBlock(node) {
+    if (!node || node.nodeType !== 1 || node.tagName !== "PRE") return false;
+    if (node.hasAttribute("data-k-lang")) return true;
+    return Array.from(node.children).some((child) => child.tagName === "CODE");
+  }
+  function codeBlockAt(root, container) {
+    var _a;
+    let node = container || (((_a = window.getSelection()) == null ? void 0 : _a.rangeCount) ? window.getSelection().getRangeAt(0).startContainer : null);
+    if (!node || !root || !root.contains(node)) return null;
+    while (node && node !== root) {
+      if (node.nodeType === 1 && node.tagName === "PRE") return isCodeBlock(node) ? node : null;
+      node = node.parentNode;
+    }
+    return null;
+  }
+  function codeElementOf(pre) {
+    const exist = Array.from(pre.children).find((child) => child.tagName === "CODE");
+    if (exist) return exist;
+    const code = document.createElement("code");
+    while (pre.firstChild) code.appendChild(pre.firstChild);
+    pre.appendChild(code);
+    return code;
+  }
+  function languageOf(pre) {
+    if (!pre) return "";
+    const marked = pre.getAttribute("data-k-lang");
+    if (marked) return normalizeLang(marked);
+    const code = Array.from(pre.children).find((child) => child.tagName === "CODE");
+    const matched = /(?:^|\s)language-([\w+#-]+)/.exec((code == null ? void 0 : code.className) || "");
+    return matched ? normalizeLang(matched[1]) : "";
+  }
+  function applyLanguage(pre, lang) {
+    const value = normalizeLang(lang);
+    const code = codeElementOf(pre);
+    pre.setAttribute("data-k-lang", value);
+    const classes = (code.className || "").split(/\s+/).filter((name) => name && !/^language-/.test(name));
+    if (value !== "plaintext") classes.push(`language-${value}`);
+    code.className = classes.join(" ");
+    if (!code.className) code.removeAttribute("class");
+    return value;
+  }
+  function codeTextOf(codeEl) {
+    const clone = codeEl.cloneNode(true);
+    clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    clone.querySelectorAll("div, p").forEach((node) => node.replaceWith(document.createTextNode(`
+${node.textContent}`)));
+    return clone.textContent.replace(/\u00a0/g, " ");
+  }
+  function caretOffsetIn(el) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return null;
+    const before = document.createRange();
+    before.selectNodeContents(el);
+    before.setEnd(range.startContainer, range.startOffset);
+    return codeTextOf(before.cloneContents());
+  }
+  function setCaretOffsetIn(el, offset) {
+    const sel = window.getSelection();
+    if (!sel) return;
+    const apply = (node, pos) => {
+      if (!node) return;
+      const range = document.createRange();
+      if (node.nodeType === 3) range.setStart(node, Math.max(0, Math.min(node.data.length, pos)));
+      else range.setStartAfter(node);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    };
+    let seen = 0;
+    let done = false;
+    const walk2 = (node) => {
+      const children = Array.from(node.childNodes);
+      for (const child of children) {
+        if (child.nodeType === 3) {
+          const len = child.data.length;
+          if (seen + len >= offset) {
+            apply(child, offset - seen);
+            return true;
+          }
+          seen += len;
+        } else if (child.nodeType === 1) {
+          if (child.tagName === "BR") {
+            if (seen + 1 >= offset) {
+              apply(child);
+              return true;
+            }
+            seen += 1;
+          } else if (child.tagName === "DIV" || child.tagName === "P") {
+            seen += 1;
+            if (walk2(child)) return true;
+          } else if (walk2(child)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    done = walk2(el);
+    if (!done) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+  function refreshCodeBlock(pre, { caret = false } = {}) {
+    if (!isCodeBlock(pre)) return false;
+    const codeEl = codeElementOf(pre);
+    if (!pre.hasAttribute("data-k-lang")) applyLanguage(pre, languageOf(pre) || "plaintext");
+    const text = codeTextOf(codeEl);
+    const html = highlightCode(text, languageOf(pre));
+    if (codeEl.innerHTML === html) return false;
+    const offset = caret ? caretOffsetIn(codeEl) : null;
+    codeEl.innerHTML = html;
+    if (offset !== null) setCaretOffsetIn(codeEl, offset);
+    return true;
+  }
+  function highlightCodeBlocks(root, { highlight = true } = {}) {
+    if (!root) return 0;
+    let count = 0;
+    root.querySelectorAll("pre").forEach((pre) => {
+      if (!isCodeBlock(pre)) return;
+      const codeEl = codeElementOf(pre);
+      if (!pre.hasAttribute("data-k-lang")) pre.setAttribute("data-k-lang", languageOf(pre) || "plaintext");
+      const text = codeTextOf(codeEl);
+      const html = highlight ? highlightCode(text, languageOf(pre)) : escapeHtml(text);
+      if (codeEl.innerHTML !== html) codeEl.innerHTML = html;
+      count += 1;
+    });
+    return count;
+  }
+  function stripHighlight(root) {
+    if (!root) return 0;
+    const tokens = root.querySelectorAll('span[class*="ke-tok-"]');
+    tokens.forEach((span) => span.replaceWith(document.createTextNode(span.textContent)));
+    if (tokens.length) root.normalize();
+    return tokens.length;
+  }
+  const MD_NAME_RE = /\.(md|markdown|mdown|mkd|mkdn|mdx|txt)$/i;
+  const MD_TYPE_RE = /^text\/(markdown|x-markdown)$|^application\/(x-)?markdown$/i;
+  function isMarkdownFile(file) {
+    if (!file) return false;
+    const name = String(file.name || "");
+    const type = String(file.type || "");
+    if (MD_TYPE_RE.test(type)) return true;
+    if (type && !/^text\//i.test(type)) return false;
+    return MD_NAME_RE.test(name);
+  }
+  const MARKDOWN_ACCEPT = ".md,.markdown,.mdown,.mkd,.mkdn,.mdx,.txt,text/markdown,text/plain";
+  function normalizeInsertMode(value) {
+    return value === "append" || value === "cursor" ? value : "replace";
+  }
+  async function readMarkdownFile(file) {
+    if (!file) return "";
+    if (typeof file.arrayBuffer !== "function") return String(await file.text());
+    const buffer = await file.arrayBuffer();
+    try {
+      return decode(buffer, "utf-8", true);
+    } catch {
+      for (const charset of ["gb18030", "gbk", "big5"]) {
+        try {
+          return decode(buffer, charset, true);
+        } catch {
+        }
+      }
+      return decode(buffer, "utf-8", false);
+    }
+  }
+  function decode(buffer, charset, fatal) {
+    return new TextDecoder(charset, { fatal }).decode(buffer);
+  }
+  const ATX_RE = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*#*[ \t]*$/;
+  const SETEXT_RE = /^ {0,3}(=+|-+)[ \t]*$/;
+  const HR_RE = /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+  const FENCE_RE = /^( {0,3})(`{3,}|~{3,})[ \t]*([^`\n]*)$/;
+  const QUOTE_RE = /^ {0,3}>/;
+  const REF_DEF_RE = /^ {0,3}\[([^\]]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$/;
+  const TABLE_DELIM_RE = /^ {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+  const HTML_BLOCK_RE = /^ {0,3}<(\/?)([A-Za-z][\w-]*)(\s|\/?>|$)/;
+  const HTML_BLOCK_TAGS = /* @__PURE__ */ new Set([
+    "div",
+    "section",
+    "article",
+    "aside",
+    "header",
+    "footer",
+    "main",
+    "nav",
+    "center",
+    "font",
+    "span",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "td",
+    "th",
+    "caption",
+    "colgroup",
+    "col",
+    "dl",
+    "dt",
+    "dd",
+    "figure",
+    "figcaption",
+    "details",
+    "summary",
+    "pre",
+    "hr",
+    "br",
+    "img",
+    "a",
+    "video",
+    "source",
+    "p",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "strong",
+    "em",
+    "b",
+    "i",
+    "u",
+    "s",
+    "del",
+    "ins",
+    "mark",
+    "code",
+    "kbd",
+    "samp",
+    "small",
+    "sub",
+    "sup",
+    "abbr",
+    "time"
+  ]);
+  const INLINE_HTML_TAGS = /* @__PURE__ */ new Set([
+    "a",
+    "img",
+    "br",
+    "wbr",
+    "em",
+    "i",
+    "strong",
+    "b",
+    "u",
+    "s",
+    "del",
+    "ins",
+    "mark",
+    "sub",
+    "sup",
+    "kbd",
+    "code",
+    "samp",
+    "var",
+    "span",
+    "small",
+    "abbr",
+    "cite",
+    "q",
+    "time",
+    "font",
+    "sup"
+  ]);
+  const INLINE_TAG_RE = /^<(\/?)([A-Za-z][A-Za-z0-9-]*)((?:\s+[^<>]*?)?)(\/?)>/;
+  const AUTOLINK_RE = /^<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*)>/;
+  const EMAIL_RE = /^<([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)>/;
+  const ESCAPABLE_RE = /[!-/:-@[-`{-~]/;
+  const ASCII_PUNCT_RE = /[!-/:-@[-`{-~]/;
+  const URL_RE = /(^|[\s(（[【>])((?:https?:\/\/|www\.)[^\s<>()"']*[^\s<>()"'.,;:!?、。，；：！？])/g;
+  function normalizeOptions(options) {
+    return {
+      gfm: options.gfm !== false,
+      breaks: !!options.breaks,
+      linkTarget: options.linkTarget || false,
+      frontMatter: options.frontMatter !== false,
+      sanitize: options.sanitize !== false
+    };
+  }
+  function markdownToHtml(input, options = {}) {
+    if (input === null || input === void 0) return "";
+    const opts = normalizeOptions(options);
+    let text = String(input).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").replace(/\u0000/g, "");
+    text = text.replace(/\t/g, "    ");
+    if (opts.frontMatter) text = stripFrontMatter(text);
+    const refs = /* @__PURE__ */ new Map();
+    const nodes = parseBlocks(text.split("\n"), refs, opts);
+    const html = nodes.map((node) => renderBlock(node, refs, opts)).join("\n");
+    if (!opts.sanitize) return html;
+    return sanitizeHtml(html, { allowEmpty: true });
+  }
+  function markdownSummary(html) {
+    const count = (re) => (String(html || "").match(re) || []).length;
+    return {
+      headings: count(/<h[1-6][\s>]/g),
+      paragraphs: count(/<p[\s>]/g),
+      lists: count(/<[uo]l[\s>]/g),
+      items: count(/<li[\s>]/g),
+      codeBlocks: count(/<pre[\s>]/g),
+      quotes: count(/<blockquote[\s>]/g),
+      tables: count(/<table[\s>]/g),
+      images: count(/<img[\s>]/g),
+      links: count(/<a\s[^>]*href=/g)
+    };
+  }
+  function stripFrontMatter(text) {
+    const matched = /^---[ \t]*\n([\s\S]*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)/.exec(text);
+    return matched ? text.slice(matched[0].length) : text;
+  }
+  const isBlank = (line) => !line || !line.trim();
+  const indentOf = (line) => line.length - line.replace(/^ +/, "").length;
+  function matchList(line) {
+    const matched = /^( *)([-+*]|\d{1,9}[.)])([ \t]*)([\s\S]*)$/.exec(line);
+    if (!matched) return null;
+    const [, lead, marker, gap, rest] = matched;
+    if (gap.length === 0 && rest.length) return null;
+    if (rest.length === 0 && gap.length === 0 && !/^[-+*]$/.test(marker)) return null;
+    const ordered = /^\d/.test(marker);
+    const pad = gap.length || 1;
+    return {
+      indent: lead.length,
+      marker,
+      ordered,
+      start: ordered ? parseInt(marker, 10) || 1 : 1,
+      contentIndent: lead.length + marker.length + pad,
+      text: rest
+    };
+  }
+  function startsNewBlock(line, opts) {
+    return ATX_RE.test(line) || FENCE_RE.test(line) || HR_RE.test(line) || QUOTE_RE.test(line) || HTML_BLOCK_RE.test(line) || !!matchList(line) || opts.gfm && TABLE_DELIM_RE.test(line);
+  }
+  function parseBlocks(lines, refs, opts, depth) {
+    const nodes = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (isBlank(line)) {
+        i += 1;
+        continue;
+      }
+      const fence = FENCE_RE.exec(line);
+      if (fence) {
+        const indent = fence[1].length;
+        const marker = fence[2];
+        const info = fence[3].trim();
+        const body = [];
+        i += 1;
+        while (i < lines.length) {
+          const closing = FENCE_RE.exec(lines[i]);
+          if (closing && closing[2][0] === marker[0] && closing[2].length >= marker.length && !closing[3].trim()) break;
+          body.push(indent ? lines[i].slice(0, indent).trim() ? lines[i] : lines[i].slice(indent) : lines[i]);
+          i += 1;
+        }
+        if (i < lines.length) i += 1;
+        nodes.push({ t: "code", lang: firstWord(info), text: body.join("\n") });
+        continue;
+      }
+      if (/^ {4}/.test(line) && !matchList(line.replace(/^ {4}/, ""))) {
+        const body = [];
+        while (i < lines.length && (isBlank(lines[i]) ? hasCodeAfterBlank(lines, i) : /^ {4}/.test(lines[i]))) {
+          body.push(lines[i].slice(4));
+          i += 1;
+        }
+        while (body.length && isBlank(body[body.length - 1])) body.pop();
+        nodes.push({ t: "code", lang: "", text: body.join("\n") });
+        continue;
+      }
+      const atx = ATX_RE.exec(line);
+      if (atx) {
+        nodes.push({ t: "h", level: atx[1].length, raw: (atx[2] || "").replace(/[ \t]+#+[ \t]*$/, "").trim() });
+        i += 1;
+        continue;
+      }
+      if (HR_RE.test(line)) {
+        nodes.push({ t: "hr" });
+        i += 1;
+        continue;
+      }
+      if (QUOTE_RE.test(line)) {
+        const inner = [];
+        while (i < lines.length) {
+          const current = lines[i];
+          if (QUOTE_RE.test(current)) {
+            inner.push(current.replace(/^ {0,3}> ?/, ""));
+            i += 1;
+            continue;
+          }
+          if (isBlank(current)) break;
+          if (startsNewBlock(current, opts)) break;
+          inner.push(current);
+          i += 1;
+        }
+        nodes.push({ t: "quote", children: parseBlocks(inner, refs, opts) });
+        continue;
+      }
+      const list = matchList(line);
+      if (list) {
+        const parsed = parseList(lines, i, list, refs, opts);
+        nodes.push(parsed.node);
+        i = parsed.next;
+        continue;
+      }
+      if (opts.gfm && line.includes("|") && i + 1 < lines.length && TABLE_DELIM_RE.test(lines[i + 1]) && lines[i + 1].includes("-")) {
+        const parsed = parseTable(lines, i, refs, opts);
+        nodes.push(parsed.node);
+        i = parsed.next;
+        continue;
+      }
+      const htmlStart = HTML_BLOCK_RE.exec(line);
+      if (htmlStart && HTML_BLOCK_TAGS.has(htmlStart[2].toLowerCase())) {
+        const raw = [];
+        while (i < lines.length && !isBlank(lines[i])) {
+          raw.push(lines[i]);
+          i += 1;
+        }
+        nodes.push({ t: "html", raw: raw.join("\n") });
+        continue;
+      }
+      const paragraph = [];
+      let setext = null;
+      while (i < lines.length && !isBlank(lines[i])) {
+        const current = lines[i];
+        if (paragraph.length === 1 && SETEXT_RE.test(current)) {
+          setext = current.trim()[0] === "=" ? 1 : 2;
+          i += 1;
+          break;
+        }
+        if (paragraph.length > 0 && startsNewBlock(current, opts)) break;
+        if (paragraph.length === 0) {
+          const def = REF_DEF_RE.exec(current);
+          if (def) {
+            registerRef(refs, def);
+            i += 1;
+            continue;
+          }
+        }
+        const hard = /(?: {2,}|\\)$/.test(current);
+        paragraph.push(hard ? current.replace(/(?: +|\\)$/, "") : current);
+        if (hard) paragraph[paragraph.length - 1] += "";
+        i += 1;
+      }
+      if (paragraph.length) {
+        const raw = paragraph.join("\n").replace(/\u0001\n/g, "");
+        if (setext) nodes.push({ t: "h", level: setext, raw: raw.trim() });
+        else nodes.push({ t: "p", raw });
+      }
+    }
+    return nodes;
+  }
+  function hasCodeAfterBlank(lines, i) {
+    let j = i;
+    while (j < lines.length && isBlank(lines[j])) j += 1;
+    return j < lines.length && /^ {4}/.test(lines[j]);
+  }
+  function registerRef(refs, matched) {
+    const key = normalizeLabel(matched[1]);
+    if (!key || refs.has(key)) return;
+    refs.set(key, { href: matched[2] || "", title: matched[3] ?? matched[4] ?? matched[5] ?? "" });
+  }
+  function normalizeLabel(label) {
+    return String(label || "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+  function firstWord(info) {
+    const value = String(info || "").trim();
+    if (!value) return "";
+    return value.split(/\s+/)[0];
+  }
+  function parseList(lines, start, first2, refs, opts, depth) {
+    const type = first2.ordered ? "ol" : "ul";
+    const baseIndent = first2.indent;
+    const items = [];
+    let loose = false;
+    let i = start;
+    while (i < lines.length) {
+      const marker = matchList(lines[i]);
+      if (!marker || marker.indent !== baseIndent || marker.ordered !== first2.ordered) break;
+      const contentIndent = marker.contentIndent;
+      const body = [marker.text];
+      i += 1;
+      let blanks = 0;
+      while (i < lines.length) {
+        const current = lines[i];
+        if (isBlank(current)) {
+          body.push("");
+          blanks += 1;
+          i += 1;
+          continue;
+        }
+        const lead = indentOf(current);
+        const next = matchList(current);
+        if (next && lead <= baseIndent) break;
+        if (lead >= contentIndent) {
+          body.push(current.slice(contentIndent));
+          if (blanks > 0) loose = true;
+          blanks = 0;
+          i += 1;
+          continue;
+        }
+        if (blanks > 0) break;
+        if (startsNewBlock(current, opts)) break;
+        body.push(current.replace(/^ {0,3}/, ""));
+        i += 1;
+      }
+      while (body.length && isBlank(body[body.length - 1])) body.pop();
+      if (blanks > 0) {
+        const nextItem = i < lines.length ? matchList(lines[i]) : null;
+        if (nextItem && nextItem.indent === baseIndent && nextItem.ordered === first2.ordered) loose = true;
+      }
+      items.push(makeItem(body, type, refs, opts));
+    }
+    return { node: { t: type, start: first2.start, loose, items }, next: i };
+  }
+  function makeItem(body, type, refs, opts) {
+    let checked = null;
+    if (type === "ul" && body.length) {
+      const task = /^\[([ xX])\][ \t]+/.exec(body[0]);
+      if (task) {
+        checked = task[1].toLowerCase() === "x";
+        body[0] = body[0].slice(task[0].length);
+      }
+    }
+    return { checked, children: parseBlocks(body, refs, opts) };
+  }
+  function parseTable(lines, start, refs, opts) {
+    const header = splitRow(lines[start]);
+    const delims = splitRow(lines[start + 1]).map((cell) => {
+      const value = cell.trim();
+      if (/^:-+:$/.test(value)) return "center";
+      if (/^-+:$/.test(value)) return "right";
+      return "left";
+    });
+    const rows = [];
+    let i = start + 2;
+    while (i < lines.length && !isBlank(lines[i]) && lines[i].includes("|") && !startsNewBlock(lines[i], opts)) {
+      rows.push(splitRow(lines[i]));
+      i += 1;
+    }
+    const width = Math.max(header.length, delims.length);
+    const pad = (cells) => {
+      const out = cells.slice(0, width);
+      while (out.length < width) out.push("");
+      return out;
+    };
+    return { node: { t: "table", align: pad(delims), head: pad(header), rows: rows.map(pad) }, next: i };
+  }
+  function splitRow(line) {
+    let value = line.trim();
+    if (value.startsWith("|")) value = value.slice(1);
+    if (value.endsWith("|") && !value.endsWith("\\|")) value = value.slice(0, -1);
+    const cells = [];
+    let buffer = "";
+    for (let i = 0; i < value.length; i += 1) {
+      const ch = value[i];
+      if (ch === "\\" && value[i + 1] === "|") {
+        buffer += "\\|";
+        i += 1;
+        continue;
+      }
+      if (ch === "|") {
+        cells.push(buffer);
+        buffer = "";
+        continue;
+      }
+      buffer += ch;
+    }
+    cells.push(buffer);
+    return cells.map((cell) => cell.trim());
+  }
+  function inline(text, refs, opts) {
+    return serialize(inlineNodes(String(text || ""), refs, opts), refs, opts);
+  }
+  function inlineNodes(text, refs, opts, inLink = false) {
+    return processEmphasis(tokenize(text, refs, opts, inLink));
+  }
+  function tokenize(text, refs, opts, inLink = false) {
+    const nodes = [];
+    const pushText = (value) => {
+      if (!value) return;
+      const last = nodes[nodes.length - 1];
+      if (last && last.type === "text" && last.bare) last.value += value;
+      else nodes.push({ type: "text", value, bare: true });
+    };
+    let i = 0;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === "\\") {
+        const next = text[i + 1];
+        if (next === "\n") {
+          nodes.push({ type: "br" });
+          i += 2;
+          continue;
+        }
+        if (next && ESCAPABLE_RE.test(next)) {
+          pushText(next);
+          i += 2;
+          continue;
+        }
+        pushText("\\");
+        i += 1;
+        continue;
+      }
+      if (ch === "`") {
+        const run = /^`+/.exec(text.slice(i))[0];
+        const close = findCodeFence(text, i + run.length, run);
+        if (close < 0) {
+          pushText(run);
+          i += run.length;
+          continue;
+        }
+        let value2 = text.slice(i + run.length, close).replace(/\n/g, " ");
+        if (value2.length > 2 && /^ .* $/.test(value2) && /[^ ]/.test(value2)) value2 = value2.slice(1, -1);
+        nodes.push({ type: "code", value: value2 });
+        i = close + run.length;
+        continue;
+      }
+      if (ch === "[" || ch === "!" && text[i + 1] === "[") {
+        const image = ch === "!";
+        const parsed = parseLink(text, image ? i + 1 : i, refs, opts, image);
+        if (parsed) {
+          nodes.push(parsed.node);
+          i = parsed.next;
+          continue;
+        }
+      }
+      if (ch === "<") {
+        const auto = AUTOLINK_RE.exec(text.slice(i));
+        if (auto) {
+          nodes.push({ type: "link", href: auto[1], title: "", children: [{ type: "text", value: auto[1], bare: false }] });
+          i += auto[0].length;
+          continue;
+        }
+        const mail = EMAIL_RE.exec(text.slice(i));
+        if (mail) {
+          nodes.push({ type: "link", href: `mailto:${mail[1]}`, title: "", children: [{ type: "text", value: mail[1], bare: false }] });
+          i += mail[0].length;
+          continue;
+        }
+        const tag = INLINE_TAG_RE.exec(text.slice(i));
+        if (tag && INLINE_HTML_TAGS.has(tag[2].toLowerCase())) {
+          nodes.push({ type: "html", value: scrubUrls(tag[0]) });
+          i += tag[0].length;
+          continue;
+        }
+        pushText("<");
+        i += 1;
+        continue;
+      }
+      if (ch === "\n") {
+        const prev = nodes[nodes.length - 1];
+        const hard = opts.breaks || prev && prev.type === "text" && / {2,}$/.test(prev.value);
+        if (prev && prev.type === "text") prev.value = prev.value.replace(/[ \t]+$/, "");
+        if (hard) nodes.push({ type: "br" });
+        else pushText("\n");
+        i += 1;
+        continue;
+      }
+      if (ch === "*" || ch === "_" || ch === "~" && opts.gfm) {
+        const run = new RegExp(`^\\${ch}+`).exec(text.slice(i))[0];
+        const prev = text[i - 1] || "";
+        const next = text[i + run.length] || "";
+        const nodes2 = computeFlanking(ch, run, prev, next);
+        nodes.push({ type: "delim", char: ch, count: run.length, canOpen: nodes2.canOpen, canClose: nodes2.canClose });
+        i += run.length;
+        continue;
+      }
+      const plain = /^[^\\`[<!*_~\n]+/.exec(text.slice(i));
+      const value = plain ? plain[0] : ch;
+      if (opts.gfm && !inLink) pushAutolinks(nodes, value);
+      else pushText(value);
+      i += value.length;
+    }
+    return nodes;
+  }
+  function findCodeFence(text, from, run) {
+    let at = text.indexOf(run, from);
+    while (at >= 0) {
+      const before = text[at - 1];
+      const after = text[at + run.length];
+      if (before !== "`" && after !== "`") return at;
+      at = text.indexOf(run, at + 1);
+    }
+    return -1;
+  }
+  function computeFlanking(char, run, prev, next) {
+    const prevChar = prev ? prev === "\n" ? "\n" : prev : "";
+    const nextChar = next ? next : "";
+    const prevWs = !prevChar || /\s/.test(prevChar);
+    const nextWs = !nextChar || /\s/.test(nextChar);
+    const prevPunct = !!prevChar && ASCII_PUNCT_RE.test(prevChar);
+    const nextPunct = !!nextChar && ASCII_PUNCT_RE.test(nextChar);
+    const leftFlanking = !nextWs && (!nextPunct || prevWs || prevPunct);
+    const rightFlanking = !prevWs && (!prevPunct || nextWs || nextPunct);
+    if (char === "_") {
+      return {
+        canOpen: leftFlanking && (!rightFlanking || prevPunct),
+        canClose: rightFlanking && (!leftFlanking || nextPunct)
+      };
+    }
+    return { canOpen: leftFlanking, canClose: rightFlanking };
+  }
+  function pushAutolinks(nodes, value) {
+    let last = 0;
+    URL_RE.lastIndex = 0;
+    let matched;
+    while (matched = URL_RE.exec(value)) {
+      const start = matched.index + matched[1].length;
+      if (start > last) pushTextNode(nodes, value.slice(last, start));
+      const href = /^www\./i.test(matched[2]) ? `http://${matched[2]}` : matched[2];
+      nodes.push({ type: "link", href, title: "", children: [{ type: "text", value: matched[2], bare: false }] });
+      last = start + matched[2].length;
+    }
+    if (last < value.length) pushTextNode(nodes, value.slice(last));
+  }
+  function pushTextNode(nodes, value) {
+    if (!value) return;
+    const last = nodes[nodes.length - 1];
+    if (last && last.type === "text" && last.bare) last.value += value;
+    else nodes.push({ type: "text", value, bare: true });
+  }
+  function parseLink(text, bracketAt, refs, opts, image) {
+    const label = findBracketEnd(text, bracketAt);
+    if (label < 0) return null;
+    const inner = text.slice(bracketAt + 1, label);
+    let i = label + 1;
+    let href = null;
+    let title = "";
+    if (text[i] === "(") {
+      const dest = parseDestination(text, i);
+      if (!dest) return null;
+      href = dest.href;
+      title = dest.title;
+      i = dest.next;
+    } else if (text[i] === "[") {
+      const close = text.indexOf("]", i + 1);
+      if (close < 0) return null;
+      const key = normalizeLabel(text.slice(i + 1, close) || inner);
+      const ref = refs.get(key);
+      if (!ref) return null;
+      href = ref.href;
+      title = ref.title;
+      i = close + 1;
+    } else {
+      const ref = refs.get(normalizeLabel(inner));
+      if (!ref) return null;
+      href = ref.href;
+      title = ref.title;
+    }
+    if (image) {
+      if (!isSafeUrl(href)) return { node: { type: "text", value: `![${inner}]` }, next: i };
+      return { node: { type: "image", src: href, title, alt: plainOf(inner) }, next: i };
+    }
+    const children = inlineNodes(inner, refs, opts, true);
+    return { node: { type: "link", href, title, children }, next: i };
+  }
+  function plainOf(nodes) {
+    if (typeof nodes === "string") return nodes.replace(/[*_~`]/g, "");
+    return "";
+  }
+  function findBracketEnd(text, open) {
+    let depth = 0;
+    for (let i = open; i < text.length; i += 1) {
+      const ch = text[i];
+      if (ch === "\\") {
+        i += 1;
+        continue;
+      }
+      if (ch === "`") {
+        const run = /^`+/.exec(text.slice(i))[0];
+        const close = findCodeFence(text, i + run.length, run);
+        i = close < 0 ? i + run.length - 1 : close + run.length - 1;
+        continue;
+      }
+      if (ch === "[") depth += 1;
+      else if (ch === "]") {
+        depth -= 1;
+        if (depth === 0) return i;
+      } else if (ch === "\n" && depth === 1 && text[i + 1] === "\n") return -1;
+    }
+    return -1;
+  }
+  function parseDestination(text, open) {
+    let i = open + 1;
+    while (text[i] === " " || text[i] === "\n") i += 1;
+    let href = "";
+    if (text[i] === "<") {
+      const close = text.indexOf(">", i + 1);
+      if (close < 0) return null;
+      href = text.slice(i + 1, close).replace(/\\([\\<>])/g, "$1");
+      i = close + 1;
+    } else {
+      let depth = 0;
+      let buffer = "";
+      while (i < text.length) {
+        const ch = text[i];
+        if (ch === "\\" && text[i + 1]) {
+          buffer += text[i + 1];
+          i += 2;
+          continue;
+        }
+        if (ch === "(") depth += 1;
+        if (ch === ")") {
+          if (depth === 0) break;
+          depth -= 1;
+        }
+        if (/\s/.test(ch) && depth === 0) break;
+        buffer += ch;
+        i += 1;
+      }
+      href = buffer;
+    }
+    while (text[i] === " " || text[i] === "\n") i += 1;
+    let title = "";
+    const quote = text[i];
+    if (quote === '"' || quote === "'" || quote === "(") {
+      const closing = quote === "(" ? ")" : quote;
+      const close = text.indexOf(closing, i + 1);
+      if (close < 0) return null;
+      title = text.slice(i + 1, close);
+      i = close + 1;
+      while (text[i] === " " || text[i] === "\n") i += 1;
+    }
+    if (text[i] !== ")") return null;
+    return { href: href.trim(), title, next: i + 1 };
+  }
+  function processEmphasis(nodes) {
+    const out = [];
+    const stack = [];
+    for (const node of nodes) {
+      if (node.type !== "delim") {
+        out.push(node);
+        continue;
+      }
+      const { char, canOpen, canClose } = node;
+      const textNode = { type: "text", value: char.repeat(node.count), bare: false };
+      out.push(textNode);
+      if (char === "~" && node.count < 2) continue;
+      const entry = { char, count: node.count, canOpen, canClose, node: textNode };
+      if (!canClose) {
+        if (canOpen) stack.push(entry);
+        continue;
+      }
+      while (entry.count > 0) {
+        const closerAt = out.indexOf(entry.node);
+        if (closerAt < 0) break;
+        let openAt = -1;
+        for (let k = stack.length - 1; k >= 0; k -= 1) {
+          const open2 = stack[k];
+          if (open2 === entry || open2.char !== char || !open2.canOpen || open2.count <= 0) continue;
+          if (char === "~" && open2.count < 2) continue;
+          const at = out.indexOf(open2.node);
+          if (at < 0 || at >= closerAt) continue;
+          if (char !== "~" && (open2.canClose || entry.canOpen)) {
+            const sum = open2.count + entry.count;
+            if (sum % 3 === 0 && !(open2.count % 3 === 0 && entry.count % 3 === 0)) continue;
+          }
+          openAt = k;
+          break;
+        }
+        if (openAt < 0) break;
+        const open = stack[openAt];
+        const use = char === "~" ? 2 : Math.min(open.count, entry.count) >= 3 ? 3 : Math.min(open.count, entry.count, 2);
+        if (use <= 0) break;
+        const inner = out.slice(out.indexOf(open.node) + 1, closerAt);
+        open.count -= use;
+        entry.count -= use;
+        open.node.value = char.repeat(open.count);
+        entry.node.value = char.repeat(entry.count);
+        const wrapper = wrapEmphasis(char, use, inner);
+        out.splice(closerAt, 1);
+        const openIdx = out.indexOf(open.node);
+        if (open.node.value) out.splice(openIdx + 1, closerAt - openIdx - 1, wrapper);
+        else out.splice(openIdx, closerAt - openIdx, wrapper);
+        for (let k = stack.length - 1; k >= 0; k -= 1) {
+          if (stack[k] !== open && (!stack[k].count || out.indexOf(stack[k].node) < 0)) stack.splice(k, 1);
+        }
+        if (open.count <= 0) {
+          const at = stack.indexOf(open);
+          if (at >= 0) stack.splice(at, 1);
+        }
+      }
+      if (entry.count > 0 && entry.canOpen && out.indexOf(entry.node) >= 0) stack.push(entry);
+    }
+    return out;
+  }
+  function wrapEmphasis(char, use, inner) {
+    if (char === "~") return { type: "del", children: inner };
+    if (use >= 3) return { type: "strong", children: [{ type: "em", children: inner }] };
+    if (use === 2) return { type: "strong", children: inner };
+    return { type: "em", children: inner };
+  }
+  function renderBlock(node, refs, opts) {
+    switch (node.t) {
+      case "p":
+        return `<p>${inline(node.raw, refs, opts)}</p>`;
+      case "h":
+        return `<h${node.level}>${inline(node.raw, refs, opts)}</h${node.level}>`;
+      case "hr":
+        return "<hr>";
+      case "code":
+        return renderCode(node);
+      case "html":
+        return stripDangerousBlocks(scrubUrls(node.raw));
+      case "quote":
+        return `<blockquote>
+${node.children.map((child) => renderBlock(child, refs, opts)).join("\n")}
+</blockquote>`;
+      case "ul":
+      case "ol": {
+        const start = node.t === "ol" && node.start !== 1 ? ` start="${node.start}"` : "";
+        const items = node.items.map((item) => renderItem(item, node.loose, refs, opts)).join("\n");
+        return `<${node.t}${start}>
+${items}
+</${node.t}>`;
+      }
+      case "table":
+        return renderTable(node, refs, opts);
+      default:
+        return "";
+    }
+  }
+  function renderCode(node) {
+    const raw = firstWord(node.lang);
+    const lang = raw ? normalizeLang(raw) : "plaintext";
+    const attr = lang === "plaintext" ? "" : ` data-k-lang="${lang}"`;
+    const cls = lang === "plaintext" ? "" : ` class="language-${lang}"`;
+    return `<pre${attr}><code${cls}>${escapeMdText(node.text)}</code></pre>`;
+  }
+  function renderItem(item, loose, refs, opts) {
+    let html;
+    const children = item.children;
+    if (!loose && children.length === 1 && children[0].t === "p") {
+      html = inline(children[0].raw, refs, opts);
+    } else {
+      html = children.map((child) => renderBlock(child, refs, opts)).join("\n");
+      if (!loose) html = html.replace(/^<p>([\s\S]*?)<\/p>/, "$1");
+    }
+    if (item.checked === null || item.checked === void 0) return `<li>${html}</li>`;
+    return `<li>${item.checked ? "☑" : "☐"} ${html}</li>`;
+  }
+  function renderTable(node, refs, opts) {
+    const cell = (tag, value, index) => {
+      const align = node.align[index];
+      const style = align && align !== "left" ? ` style="text-align:${align}"` : "";
+      return `<${tag}${style}>${inline(value, refs, opts)}</${tag}>`;
+    };
+    const head = `<tr>${node.head.map((value, index) => cell("th", value, index)).join("")}</tr>`;
+    const body = node.rows.map((row) => `<tr>${row.map((value, index) => cell("td", value, index)).join("")}</tr>`);
+    if (!body.length) return `<table><thead>${head}</thead></table>`;
+    return `<table><thead>${head}</thead><tbody>${body.join("")}</tbody></table>`;
+  }
+  function serialize(nodes, refs, opts) {
+    return nodes.map((node) => serializeNode(node, refs, opts)).join("");
+  }
+  function serializeNode(node, refs, opts) {
+    switch (node.type) {
+      case "text":
+        return escapeMdText(node.value).replace(/\u0001/g, "<br>");
+      case "code":
+        return `<code>${escapeMdText(node.value)}</code>`;
+      case "br":
+        return "<br>";
+      case "html":
+        return node.value;
+      case "em":
+        return `<em>${serialize(node.children, refs, opts)}</em>`;
+      case "strong":
+        return `<strong>${serialize(node.children, refs, opts)}</strong>`;
+      case "del":
+        return `<del>${serialize(node.children, refs, opts)}</del>`;
+      case "image": {
+        const title = node.title ? ` title="${escapeAttr(node.title)}"` : "";
+        return `<img src="${escapeAttr(node.src)}" alt="${escapeAttr(node.alt)}"${title}>`;
+      }
+      case "link": {
+        const href = isSafeUrl(node.href) ? node.href : "#";
+        const title = node.title ? ` title="${escapeAttr(node.title)}"` : "";
+        const target = opts.linkTarget ? ' target="_blank" rel="noopener noreferrer"' : "";
+        return `<a href="${escapeAttr(href)}"${title}${target}>${serialize(node.children, refs, opts)}</a>`;
+      }
+      default:
+        return "";
+    }
+  }
+  const DANGEROUS_BLOCK_RE = /<(script|style|iframe|object|embed|form|link|meta|base)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+  const DANGEROUS_TAG_RE = /<\/?(?:script|style|iframe|object|embed|form|link|meta|base)\b[^>]*>/gi;
+  function stripDangerousBlocks(html) {
+    return String(html).replace(DANGEROUS_BLOCK_RE, "").replace(DANGEROUS_TAG_RE, "");
+  }
+  const URL_ATTR_RE = /\s(href|src)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  function scrubUrls(html) {
+    return String(html).replace(URL_ATTR_RE, (all, _name, _raw, dq, sq, bare) => {
+      const value = dq ?? sq ?? bare ?? "";
+      return isSafeUrl(value) ? all : "";
+    });
+  }
+  const ENTITY_RE = /&(?![a-zA-Z][a-zA-Z0-9]{1,31};|#\d{1,7};|#[xX][0-9a-fA-F]{1,6};)/g;
+  function escapeMdText(value) {
+    return String(value === null || value === void 0 ? "" : value).replace(ENTITY_RE, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function escapeAttr(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
   const THEME_COLORS = [
     ["#07c160", "微信绿"],
@@ -664,6 +2496,10 @@
         if (event.key === "Escape") this.close();
       };
       document.addEventListener("keydown", this.keyHandler);
+      this.resizeHandler = () => {
+        if (!this.el.hidden) this.place();
+      };
+      window.addEventListener("resize", this.resizeHandler);
     }
     open(anchor, build, { align = "start", onClose } = {}) {
       var _a;
@@ -672,25 +2508,45 @@
       if (content) this.el.appendChild(content);
       this.el.hidden = false;
       this.anchor = anchor;
+      this.align = align;
       this.onClose = onClose;
-      const rootBox = this.root.getBoundingClientRect();
-      const box = anchor.getBoundingClientRect();
-      const popBox = this.el.getBoundingClientRect();
-      let left = box.left - rootBox.left;
-      if (align === "center") left = box.left - rootBox.left + box.width / 2 - popBox.width / 2;
-      if (align === "end") left = box.right - rootBox.left - popBox.width;
-      left = Math.max(8, Math.min(left, rootBox.width - popBox.width - 8));
-      let top = box.top - rootBox.top + box.height + 8;
-      if (top + popBox.height > rootBox.height - 8 && box.top - rootBox.top - popBox.height - 8 > 0) {
-        top = box.top - rootBox.top - popBox.height - 8;
-      }
-      this.el.style.left = `${left}px`;
-      this.el.style.top = `${top}px`;
+      this.place();
       this.el.classList.remove("ke-pop-in");
       void this.el.offsetWidth;
       this.el.classList.add("ke-pop-in");
       const first2 = [...this.el.querySelectorAll("[data-k-autofocus]")].find((node) => node.offsetParent !== null);
       (_a = first2 == null ? void 0 : first2.focus) == null ? void 0 : _a.call(first2);
+    }
+    /** 定位 + 高度夹紧：面板可以内部滚动，但底部按钮必须留在可视区内 */
+    place() {
+      const anchor = this.anchor;
+      if (!anchor) return;
+      this.el.style.removeProperty("--ke-pop-max");
+      const align = this.align;
+      const rootBox = this.root.getBoundingClientRect();
+      const box = anchor.getBoundingClientRect();
+      const visTop = Math.max(0, -rootBox.top);
+      const visBottom = Math.min(rootBox.height, window.innerHeight - rootBox.top);
+      const popBox = this.el.getBoundingClientRect();
+      let left = box.left - rootBox.left;
+      if (align === "center") left = box.left - rootBox.left + box.width / 2 - popBox.width / 2;
+      if (align === "end") left = box.right - rootBox.left - popBox.width;
+      left = Math.max(8, Math.min(left, rootBox.width - popBox.width - 8));
+      const below = box.top - rootBox.top + box.height + 8;
+      const aboveTop = box.top - rootBox.top - 8;
+      const band = Math.max(0, visBottom - visTop - 16);
+      const roomBelow = visBottom - 8 - below;
+      const roomAbove = aboveTop - visTop;
+      const room = roomBelow >= 320 ? Math.min(roomBelow, band) : band;
+      const height = Math.max(180, Math.min(popBox.height, room));
+      if (height < popBox.height) this.el.style.setProperty("--ke-pop-max", `${Math.round(height)}px`);
+      let top;
+      if (height <= roomBelow) top = below;
+      else if (roomAbove > roomBelow && height <= roomAbove) top = aboveTop - height;
+      else top = visBottom - 8 - height;
+      top = Math.max(visTop, Math.min(top, Math.max(visTop, visBottom - 8 - height)));
+      this.el.style.left = `${left}px`;
+      this.el.style.top = `${top}px`;
     }
     close() {
       if (this.el.hidden) return;
@@ -708,6 +2564,7 @@
     destroy() {
       document.removeEventListener("mousedown", this.docHandler, true);
       document.removeEventListener("keydown", this.keyHandler);
+      window.removeEventListener("resize", this.resizeHandler);
       this.el.remove();
     }
   }
@@ -722,6 +2579,231 @@
   }
   function divider() {
     return h("div.ke-panel-divider");
+  }
+  function codePanel({ languages, value, editing, onPick }) {
+    const wrap = panel(editing ? "代码块语言" : "插入代码块");
+    wrap.classList.add("ke-panel-wide", "ke-code-panel");
+    const note = h("span.ke-panel-note");
+    wrap.querySelector(".ke-panel-head").appendChild(note);
+    const search = h("input.ke-input.ke-sel-search", {
+      type: "search",
+      placeholder: "搜索语言，如 js / python",
+      "data-k-autofocus": ""
+    });
+    wrap.appendChild(search);
+    const body = h("div.ke-code-list");
+    wrap.appendChild(body);
+    wrap.appendChild(h("div.ke-panel-hint", {
+      text: editing ? "切换后会立即重新高亮当前代码块" : "插入后点「代码块」按钮可随时切换语言"
+    }));
+    let visible = languages;
+    function render() {
+      const keyword = search.value.trim().toLowerCase();
+      visible = keyword ? languages.filter((item) => `${item.label} ${item.hint} ${item.value}`.toLowerCase().includes(keyword)) : languages;
+      note.textContent = keyword ? `${visible.length} / ${languages.length} 种` : `${languages.length} 种语言`;
+      body.textContent = "";
+      if (!visible.length) {
+        body.appendChild(h("div.ke-sel-tip", {}, [h("span.ke-sel-tip-text", { text: `没有匹配「${search.value.trim()}」的语言` })]));
+        return;
+      }
+      visible.forEach((item) => {
+        const row = h("button.ke-sel-row", {
+          type: "button",
+          dataset: { kLang: item.value },
+          onclick: () => onPick(item.value)
+        }, [
+          h("span.ke-sel-main", {}, [
+            h("span.ke-sel-label", { text: item.label }),
+            h("span.ke-sel-desc", { text: item.hint })
+          ])
+        ]);
+        if (item.value === value) {
+          row.classList.add("ke-is-active");
+          row.appendChild(h("span.ke-sel-check", { html: icon("check") }));
+        }
+        body.appendChild(row);
+      });
+    }
+    search.addEventListener("input", render);
+    search.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      if (visible.length) onPick(visible[0].value);
+    });
+    render();
+    return wrap;
+  }
+  function markdownPanel({ insertMode = "replace", accept = "", maxText = "", highlight = true, onConvert, onImport }) {
+    const wrap = panel("导入 Markdown");
+    wrap.classList.add("ke-panel-wide", "ke-md-panel");
+    const note = h("span.ke-panel-note", { text: "尚未选择文件" });
+    wrap.querySelector(".ke-panel-head").appendChild(note);
+    const state = { text: "", name: "", mode: insertMode, picked: false };
+    const local = h("div.ke-tab-body");
+    const pasteBody = h("div.ke-tab-body", { hidden: true });
+    const tabs = h("div.ke-tabs", {}, [
+      h("button.ke-tab", { type: "button", text: "选择文件" }),
+      h("button.ke-tab", { type: "button", text: "粘贴文本" })
+    ]);
+    const show = (index) => {
+      [...tabs.children].forEach((tab, i) => tab.classList.toggle("ke-is-active", i === index));
+      local.hidden = index !== 0;
+      pasteBody.hidden = index !== 1;
+      if (index === 1) textarea.focus();
+    };
+    tabs.children[0].addEventListener("click", () => show(0));
+    tabs.children[1].addEventListener("click", () => show(1));
+    const input = h("input", { type: "file", accept, hidden: true, style: { display: "none" } });
+    const fileRow = h("div.ke-md-file", { hidden: true });
+    const drop = h("div.ke-drop", {}, [
+      h("span.ke-drop-ico", { html: icon("upload") }),
+      h("div.ke-drop-title", { text: "点击选择 .md 文件，或拖拽到此处" }),
+      h("div.ke-drop-sub", { text: [maxText, "支持 .md / .markdown / .txt，自动识别 UTF-8 与 GBK"].filter(Boolean).join(" · ") })
+    ]);
+    drop.addEventListener("click", () => input.click());
+    drop.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      drop.classList.add("ke-is-over");
+    });
+    drop.addEventListener("dragleave", () => drop.classList.remove("ke-is-over"));
+    drop.addEventListener("drop", (event) => {
+      var _a, _b;
+      event.preventDefault();
+      drop.classList.remove("ke-is-over");
+      const file = (_b = (_a = event.dataTransfer) == null ? void 0 : _a.files) == null ? void 0 : _b[0];
+      if (file) loadFile(file);
+    });
+    input.addEventListener("change", () => {
+      var _a;
+      const file = (_a = input.files) == null ? void 0 : _a[0];
+      input.value = "";
+      if (file) loadFile(file);
+    });
+    async function loadFile(file) {
+      try {
+        const text = await readMarkdownFile(file);
+        state.text = text;
+        state.name = file.name || "";
+        state.picked = true;
+        fileRow.hidden = false;
+        fileRow.textContent = "";
+        fileRow.append(
+          h("b", { text: file.name || "未命名" }),
+          h("span", { text: `${formatSize(file.size)} · ${text.length} 字符` })
+        );
+        schedule();
+      } catch (error) {
+        state.text = "";
+        fileRow.hidden = false;
+        fileRow.textContent = "";
+        fileRow.appendChild(h("span.ke-md-error", { text: `读取失败：${error.message}` }));
+        render();
+      }
+    }
+    local.append(drop, input, fileRow);
+    const textarea = h("textarea.ke-md-text", {
+      placeholder: "# 标题\n\n正文段落，支持 **加粗**、列表、表格、```js 代码块 ...",
+      spellcheck: "false"
+    });
+    pasteBody.appendChild(textarea);
+    const MODES = [
+      ["replace", "替换全文"],
+      ["append", "追加文末"],
+      ["cursor", "插入光标"]
+    ];
+    const modeRow = h("div.ke-md-modes");
+    const modeText = { replace: "清空正文后导入（可撤销）", append: "保留正文，追加到末尾", cursor: "插入到当前光标位置" };
+    MODES.forEach(([value, label]) => {
+      const button = h("button.ke-md-mode", { type: "button", title: modeText[value], text: label });
+      button.classList.toggle("ke-is-active", value === state.mode);
+      button.addEventListener("click", () => {
+        state.mode = value;
+        [...modeRow.children].forEach((node) => node.classList.toggle("ke-is-active", node === button));
+      });
+      modeRow.appendChild(button);
+    });
+    const preview = h("div.ke-md-preview.ke-content");
+    const stats = h("div.ke-md-stats");
+    const importer = h("button.ke-btn-primary", { type: "button", text: "导入到正文", disabled: true });
+    let timer = null;
+    function schedule() {
+      clearTimeout(timer);
+      timer = setTimeout(render, 180);
+    }
+    function convert() {
+      const text = state.text;
+      if (!text.trim()) return { html: "", summary: null };
+      try {
+        return onConvert(text) || { html: "", summary: null };
+      } catch (error) {
+        return { html: "", summary: null, error };
+      }
+    }
+    function render() {
+      const result = convert();
+      const empty = !state.text.trim();
+      importer.disabled = empty || !result.html || !!result.error;
+      note.textContent = empty ? "尚未选择文件" : `${state.text.length} 字符`;
+      preview.textContent = "";
+      stats.textContent = "";
+      if (result.error) {
+        preview.appendChild(h("div.ke-md-empty", { text: `转换失败：${result.error.message}` }));
+        return;
+      }
+      if (empty) {
+        preview.appendChild(h("div.ke-md-empty", { text: "选择文件或粘贴 Markdown 后，这里会显示转换预览" }));
+        return;
+      }
+      preview.innerHTML = result.html;
+      if (highlight) highlightCodeBlocks(preview, { highlight: true });
+      const summary = result.summary || {};
+      const items = [
+        ["标题", summary.headings],
+        ["段落", summary.paragraphs],
+        ["列表", summary.lists],
+        ["代码块", summary.codeBlocks],
+        ["引用", summary.quotes],
+        ["表格", summary.tables],
+        ["图片", summary.images],
+        ["链接", summary.links]
+      ].filter(([, count]) => count);
+      items.forEach(([label, count]) => {
+        stats.appendChild(h("span.ke-md-stat", {}, [h("b", { text: String(count) }), ` ${label}`]));
+      });
+      if (!items.length) stats.appendChild(h("span.ke-md-stat", { text: "未识别到块级结构，将按纯文本导入" }));
+    }
+    textarea.addEventListener("input", () => {
+      state.text = textarea.value;
+      state.name = "";
+      schedule();
+    });
+    importer.addEventListener("click", async () => {
+      if (importer.disabled) return;
+      importer.disabled = true;
+      importer.textContent = "导入中…";
+      try {
+        await onImport({ text: state.text, name: state.name, mode: state.mode });
+      } finally {
+        importer.textContent = "导入到正文";
+        importer.disabled = !state.text.trim();
+      }
+    });
+    wrap.append(
+      tabs,
+      h("div.ke-md-body", {}, [
+        local,
+        pasteBody,
+        h("div.ke-panel-sect", { text: "导入位置" }),
+        modeRow,
+        h("div.ke-panel-sect", { text: "转换预览" }),
+        preview,
+        stats
+      ]),
+      h("div.ke-panel-foot", {}, [importer, h("span.ke-panel-hint", { text: "转换后为可直接编辑的 HTML" })])
+    );
+    show(0);
+    render();
+    return wrap;
   }
   function colorPanel({ title, kind, colors, value, recents = [], onPick, onClear }) {
     const isBg = kind === "bg";
@@ -1186,6 +3268,10 @@
           return;
         }
         const hasBlockChild = [...child.querySelectorAll("*")].some((node) => BLOCK_TAGS.has(node.tagName.toLowerCase()));
+        if (tag === "pre") {
+          lines.push({ depth, text: indent.repeat(depth) + child.outerHTML.trim(), inlineRun: false });
+          return;
+        }
         const keepOneLine = tag === "tr" || tag === "figure" || tag === "video";
         if (!hasBlockChild || keepOneLine) {
           lines.push({ depth, text: indent.repeat(depth) + collapse(child.outerHTML), inlineRun: false });
@@ -1197,7 +3283,7 @@
       });
     };
     walk2(root, 0);
-    return lines.map((line) => line.text).join("\n").replace(/\n{3,}/g, "\n\n");
+    return lines.map((line) => line.text).join("\n");
   }
   function collapse(markup) {
     return markup.replace(/\n\s+/g, " ").replace(/\s{2,}/g, " ").trim();
@@ -1628,210 +3714,6 @@
     if (match) return parseFloat(match[1]);
     return img.getBoundingClientRect().width / figureWidth * 100;
   }
-  const ALLOWED_TAGS = /* @__PURE__ */ new Set([
-    "a",
-    "abbr",
-    "b",
-    "blockquote",
-    "br",
-    "code",
-    "col",
-    "colgroup",
-    "dd",
-    "del",
-    "div",
-    "dl",
-    "dt",
-    "em",
-    "figcaption",
-    "figure",
-    "font",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hr",
-    "i",
-    "img",
-    "ins",
-    "kbd",
-    "li",
-    "mark",
-    "ol",
-    "p",
-    "pre",
-    "s",
-    "samp",
-    "section",
-    "small",
-    "span",
-    "strong",
-    "sub",
-    "sup",
-    "table",
-    "tbody",
-    "td",
-    "tfoot",
-    "th",
-    "thead",
-    "tr",
-    "u",
-    "ul",
-    "video",
-    "source"
-  ]);
-  const GLOBAL_ATTRS = /* @__PURE__ */ new Set(["style", "class"]);
-  const TAG_ATTRS = {
-    A: ["href", "title", "target", "rel"],
-    IMG: ["src", "alt", "title", "width", "height"],
-    VIDEO: ["src", "poster", "controls", "loop", "muted", "playsinline", "preload", "width", "height"],
-    SOURCE: ["src", "type"],
-    FONT: ["size", "color"],
-    TD: ["colspan", "rowspan"],
-    TH: ["colspan", "rowspan"],
-    OL: ["start"],
-    LI: ["value"]
-  };
-  const DATA_PREFIX = ["data-k-", "data-keditor-"];
-  const SAFE_URL_RE = /^(?:https?:|mailto:|tel:|blob:|\/|#|\.{1,2}\/|[^:]*$)/i;
-  const SAFE_DATA_RE = /^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);/i;
-  function isSafeUrl(url) {
-    if (!url) return false;
-    const value = String(url).trim().replace(/\s+/g, "");
-    if (/^(javascript|vbscript|file|about):/i.test(value)) return false;
-    if (value.startsWith("data:")) return SAFE_DATA_RE.test(value);
-    return SAFE_URL_RE.test(value);
-  }
-  function sanitizeStyle(value) {
-    const out = [];
-    for (const decl of String(value).split(";")) {
-      const idx = decl.indexOf(":");
-      if (idx < 0) continue;
-      const prop = decl.slice(0, idx).trim().toLowerCase();
-      const val = decl.slice(idx + 1).trim();
-      if (!prop || !val) continue;
-      if (!/^[a-z-]+$/.test(prop)) continue;
-      if (prop.startsWith("mso-") || prop.startsWith("-mso-")) continue;
-      if (/expression|javascript:|behavior:|url\(\s*['"]?\s*(javascript|data):/i.test(val)) continue;
-      out.push(`${prop}:${val}`);
-    }
-    return out.join(";");
-  }
-  function sanitizeClass(value) {
-    return String(value).split(/\s+/).filter((name) => /^[\w-]+$/.test(name) && !/^(script|javascript)/i.test(name)).join(" ");
-  }
-  function keepAttribute(tagName, attrName, attrValue) {
-    const name = attrName.toLowerCase();
-    if (name.startsWith("on")) return false;
-    if (GLOBAL_ATTRS.has(name)) return true;
-    if (DATA_PREFIX.some((prefix) => name.startsWith(prefix))) return true;
-    const list = TAG_ATTRS[tagName] || [];
-    return list.includes(name);
-  }
-  function sanitizeHtml(html, { allowEmpty = false } = {}) {
-    if (!html) return allowEmpty ? "" : "<p><br></p>";
-    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
-    const root = doc.body.firstChild;
-    walk(root);
-    const result = root.innerHTML.trim();
-    if (!result && !allowEmpty) return "<p><br></p>";
-    return result;
-  }
-  function walk(node) {
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
-      if (child.nodeType === 8) {
-        child.remove();
-        continue;
-      }
-      if (child.nodeType === 3) continue;
-      if (child.nodeType !== 1) {
-        child.remove();
-        continue;
-      }
-      const tagName = child.tagName;
-      if (!ALLOWED_TAGS.has(tagName.toLowerCase())) {
-        if (tagName === "SCRIPT" || tagName === "STYLE" || tagName === "IFRAME" || tagName === "OBJECT" || tagName === "EMBED" || tagName === "FORM" || tagName === "LINK" || tagName === "META") {
-          child.remove();
-          continue;
-        }
-        const parent = child.parentNode;
-        while (child.firstChild) parent.insertBefore(child.firstChild, child);
-        parent.removeChild(child);
-        continue;
-      }
-      for (const attr of Array.from(child.attributes)) {
-        if (!keepAttribute(tagName, attr.name, attr.value)) {
-          child.removeAttribute(attr.name);
-          continue;
-        }
-        const lower = attr.name.toLowerCase();
-        if (lower === "style") child.setAttribute("style", sanitizeStyle(attr.value));
-        else if (lower === "class") {
-          const cls = sanitizeClass(attr.value);
-          if (cls) child.setAttribute("class", cls);
-          else child.removeAttribute("class");
-        } else if (lower === "href" || lower === "src" || lower === "poster") {
-          if (!isSafeUrl(attr.value)) child.removeAttribute(attr.name);
-        }
-      }
-      if (tagName === "A" && child.getAttribute("target") === "_blank") child.setAttribute("rel", "noopener noreferrer");
-      if (child.getAttribute("href") === "" || !child.getAttribute("href")) {
-        if (tagName === "A") child.removeAttribute("href");
-      }
-      walk(child);
-    }
-  }
-  const WORD_FONT_SIZES = { 1: 10, 2: 13, 3: 16, 4: 18, 5: 24, 6: 32, 7: 48 };
-  function isWordHtml(html) {
-    return /urn:schemas-microsoft-com|class=["']?Mso|ProgID|w:val=/i.test(html);
-  }
-  function cleanWordHtml(html) {
-    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
-    const root = doc.body.firstChild;
-    root.querySelectorAll("*").forEach((node) => {
-      const tag = node.tagName.toLowerCase();
-      if (tag.startsWith("o:") || tag.startsWith("w:") || tag === "style" || tag === "script" || tag === "link" || tag === "meta") {
-        node.remove();
-        return;
-      }
-      if (tag === "img") {
-        const width = Number(node.getAttribute("width") || 0);
-        const height = Number(node.getAttribute("height") || 0);
-        if (width && width <= 3 || height && height <= 3) node.remove();
-        return;
-      }
-      if (tag === "font") {
-        const size = WORD_FONT_SIZES[Number(node.getAttribute("size"))];
-        const span = doc.createElement("span");
-        const styles = [];
-        if (size) styles.push(`font-size:${size}px`);
-        if (node.color) styles.push(`color:${node.color}`);
-        if (styles.length) span.setAttribute("style", styles.join(";"));
-        while (node.firstChild) span.appendChild(node.firstChild);
-        node.replaceWith(span);
-        return;
-      }
-      for (const attr of Array.from(node.attributes)) {
-        const name = attr.name.toLowerCase();
-        if (name.startsWith("mso-") || name === "class" || name.startsWith("_") || name.startsWith("w:") || name.startsWith("o:") || name === "lang" || name === "dir") {
-          node.removeAttribute(attr.name);
-        }
-      }
-    });
-    return root.innerHTML;
-  }
-  function escapeHtml(text) {
-    return String(text).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
-  }
-  function toPlainText(html) {
-    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
-    doc.body.querySelectorAll("style,script").forEach((n) => n.remove());
-    doc.body.innerHTML = doc.body.innerHTML.replace(/<\/(p|div|h[1-6]|li|blockquote|pre|tr)>/gi, "\n");
-    return doc.body.textContent.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  }
   const DEFAULT_TIMEOUT = 1e4;
   function pickArray(raw) {
     if (Array.isArray(raw)) return raw;
@@ -2014,7 +3896,7 @@
       return fromRaw === void 0 || fromRaw === null ? match : String(fromRaw);
     });
   }
-  function pick$1(raw, item, editor) {
+  function pick(raw, item, editor) {
     return typeof raw === "function" ? raw(item, editor) : raw;
   }
   function resolveLink(spec, item, editor) {
@@ -2026,10 +3908,10 @@
     else if (conf === true || item.url) raw = { url: item.url };
     if (!raw) return null;
     if (typeof raw === "string") raw = { url: raw };
-    const url = normalizeUrl(fill(String(pick$1(raw.url, item, editor) ?? ""), item));
+    const url = normalizeUrl(fill(String(pick(raw.url, item, editor) ?? ""), item));
     if (!url || !isSafeUrl(url)) return null;
-    const text = pick$1(raw.text, item, editor);
-    const title = pick$1(raw.title, item, editor);
+    const text = pick(raw.text, item, editor);
+    const title = pick(raw.title, item, editor);
     const mode = raw.mode === "open" ? "open" : "insert";
     const target = raw.target === "_self" || raw.target === false ? "_self" : "_blank";
     return {
@@ -2140,6 +4022,7 @@
     "hr",
     "clear",
     ":tail",
+    "markdown",
     "source",
     "fullscreen"
   ];
@@ -2161,7 +4044,8 @@
     image: { icon: "image", title: "图片（本地上传 / 网络链接）", run: (e) => e.toolbar.openMedia("image"), toggles: true },
     video: { icon: "video", title: "视频（本地上传 / 网络链接，支持分片上传）", run: (e) => e.toolbar.openMedia("video"), toggles: true },
     table: { icon: "table", title: "插入表格", run: (e) => e.toolbar.openTable(), toggles: true },
-    code: { icon: "code", title: "代码块", run: (e) => e.commands.insertCodeBlock() },
+    code: { icon: "code", title: "代码块（选择语言并语法高亮）", run: (e) => e.toolbar.openCode(), active: (s) => s.inCode, toggles: true },
+    markdown: { icon: "markdown", text: "导入MD", title: "导入 Markdown 文件 / 粘贴 Markdown 文本，转为 HTML 显示（.md / .txt）", run: (e) => e.toolbar.openMarkdown(), toggles: true },
     hr: { icon: "hr", title: "分割线", run: (e) => e.commands.insertDivider() },
     clear: { icon: "clear", title: "清除格式", run: (e) => e.commands.clearFormat() },
     source: { icon: "source", title: "查看 / 编辑 HTML 源码（⌘/Ctrl+Shift+K）", text: "源码", run: (e) => e.toggleSource(), active: (s) => s.source },
@@ -2569,6 +4453,51 @@
       this.editor.commands.setColor(kind, color);
       this.editor.popover.close();
     }
+    /**
+     * 代码块：光标不在代码块里 = 选语言后插入；在代码块里 = 换语言并重新高亮
+     * （代码块对象在打开面板时就锁定，避免面板抢焦点后选区丢失）
+     */
+    openCode() {
+      const button = this.buttons.get("code");
+      const block = codeBlockAt(this.editor.root);
+      this.togglePop("code", button, () => codePanel({
+        languages: this.editor.codeLanguages(),
+        value: block ? languageOf(block) || "plaintext" : this.editor.lastCodeLang,
+        editing: !!block,
+        onPick: (lang) => {
+          this.editor.lastCodeLang = lang;
+          this.editor.popover.close();
+          this.editor.restoreSelection();
+          if (block) this.editor.commands.setCodeLanguage(lang, block);
+          else this.editor.commands.insertCodeBlock("", lang);
+          this.editor.refresh();
+        }
+      }));
+    }
+    /**
+     * 打开 Markdown 导入面板：选文件 / 粘贴文本 → 预览 → 按落点导入
+     * （转换与落点模式都复用 options.markdown，保证面板与 API 行为一致）
+     */
+    openMarkdown() {
+      const button = this.buttons.get("markdown");
+      const editor = this.editor;
+      const config = editor.options.markdown;
+      this.togglePop("markdown", button, () => markdownPanel({
+        insertMode: normalizeInsertMode(config.insertMode),
+        accept: MARKDOWN_ACCEPT,
+        maxText: config.maxSize ? `单个文件上限 ${formatSize(config.maxSize)}` : "",
+        highlight: editor.options.code.highlight !== false,
+        onConvert: (text) => {
+          const html = markdownToHtml(text, config);
+          return { html, summary: markdownSummary(html) };
+        },
+        onImport: async ({ text, mode }) => {
+          editor.popover.close();
+          const result = await editor.importMarkdown(text, { mode });
+          return result.ok;
+        }
+      }));
+    }
     openTable() {
       const button = this.buttons.get("table");
       this.togglePop("table", button, () => tablePanel((cols, rows) => {
@@ -2856,7 +4785,7 @@
       }
     }
   }
-  function insertNode(root, node, { inline = false, selectAfter = true } = {}) {
+  function insertNode(root, node, { inline: inline2 = false, selectAfter = true } = {}) {
     root.focus();
     const range = getRange(root);
     if (!range) {
@@ -2865,7 +4794,7 @@
       return node;
     }
     if (!range.collapsed) range.deleteContents();
-    if (inline) {
+    if (inline2) {
       range.insertNode(node);
     } else {
       const block = closestBlock(range.startContainer, root);
@@ -3065,13 +4994,44 @@
       this.exec("insertHTML", "");
       this.editor.afterEdit();
     }
-    insertCodeBlock(code = "") {
+    /**
+     * 插入代码块（默认语言取 options.code.defaultLanguage），并把光标放进代码里
+     */
+    insertCodeBlock(code = "", lang) {
       const pre = document.createElement("pre");
       const codeEl = document.createElement("code");
       codeEl.textContent = code || "// 在这里输入代码";
       pre.appendChild(codeEl);
+      applyLanguage(pre, lang || this.editor.lastCodeLang);
+      refreshCodeBlock(pre);
       insertNode(this.root, pre);
       this.editor.afterEdit();
+      this.placeCaretIn(pre);
+      return pre;
+    }
+    /** 切换光标所在（或显式指定）代码块的语言并重新高亮；caret 保持块内光标 */
+    setCodeLanguage(lang, target) {
+      const pre = target || codeBlockAt(this.root);
+      if (!pre) return null;
+      const value = applyLanguage(pre, lang);
+      refreshCodeBlock(pre, { caret: true });
+      this.editor.afterEdit();
+      return value;
+    }
+    /** 光标落在代码块内容末尾，插入后可以立刻敲代码 */
+    placeCaretIn(pre) {
+      const codeEl = codeElementOf(pre);
+      const range = document.createRange();
+      range.selectNodeContents(codeEl);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    /** 当前光标所在代码块的语言；不在代码块中返回空串 */
+    currentCodeLang() {
+      const pre = codeBlockAt(this.root);
+      return pre ? languageOf(pre) : "";
     }
     insertDivider() {
       const hr = document.createElement("hr");
@@ -3086,6 +5046,9 @@
         range.deleteContents();
         const tmp = document.createElement("div");
         tmp.innerHTML = value;
+        tmp.querySelectorAll("pre").forEach((pre) => {
+          if (pre.querySelector("code") || pre.hasAttribute("data-k-lang")) refreshCodeBlock(pre);
+        });
         const frag = document.createDocumentFragment();
         while (tmp.firstChild) frag.appendChild(tmp.firstChild);
         const last = frag.lastChild;
@@ -3586,28 +5549,83 @@
     return async (file) => fastFingerprint(file);
   }
   const MB$1 = 1024 * 1024;
-  class ChunkUploader {
+  class SimpleUploader {
     constructor(adapter, options = {}) {
-      if (!adapter || typeof adapter.put !== "function") {
-        throw new Error("[KEditor] uploader 需要提供 put() 方法，参见 docs/upload-adapter.md");
+      if (!adapter || typeof adapter.upload !== "function") {
+        throw new Error("[KEditor] 普通上传的 uploader 需要提供 upload() 方法（或直接给一个接口地址 / 上传函数），参见 docs/upload-adapter.md");
       }
       this.adapter = adapter;
+      this.mode = "normal";
+      this.options = options;
+    }
+    /**
+     * @param {File|Blob} file
+     * @param {{onProgress?,signal?}} handlers
+     * @returns {Promise<{url:string, chunks:number, size:number, name:string, mode:string}>}
+     */
+    async upload(file, handlers = {}) {
+      const { onProgress, signal } = handlers;
+      const startedAt = Date.now();
+      const report = (ratio, loaded) => {
+        const elapsed = (Date.now() - startedAt) / 1e3;
+        onProgress == null ? void 0 : onProgress(ratio, {
+          percent: Math.round(ratio * 100),
+          loaded,
+          total: file.size,
+          chunks: 1,
+          uploadedChunks: ratio >= 1 ? 1 : 0,
+          speed: elapsed > 0 ? loaded / elapsed : 0,
+          mode: "normal"
+        });
+      };
+      report(0, 0);
+      const result = await this.adapter.upload(file, {
+        signal,
+        onProgress: (loaded, total) => report(total ? Math.min(1, loaded / total) : 0, loaded)
+      });
+      const url = typeof result === "string" ? result : result == null ? void 0 : result.url;
+      if (!url) throw new Error('[KEditor] 普通上传接口未返回 url：期望响应形如 { "url": "https://…" }');
+      report(1, file.size);
+      return {
+        url,
+        chunks: 1,
+        mode: "normal",
+        size: file.size,
+        name: file.name,
+        key: typeof result === "object" ? result.key : void 0,
+        raw: result
+      };
+    }
+    destroy() {
+      var _a, _b;
+      (_b = (_a = this.adapter).destroy) == null ? void 0 : _b.call(_a);
+    }
+  }
+  class ChunkUploader {
+    constructor(adapter, options = {}) {
+      if (!adapter || typeof adapter.put !== "function" && typeof adapter.upload !== "function") {
+        throw new Error("[KEditor] 分片上传的 uploader 需要提供 put() 方法，参见 docs/upload-adapter.md");
+      }
+      this.adapter = adapter;
+      this.simple = typeof adapter.put === "function" ? null : new SimpleUploader(adapter, options);
+      this.mode = "chunk";
       this.chunkSize = Math.max(64 * 1024, options.chunkSize || MB$1);
       this.concurrency = Math.max(1, options.concurrency || 3);
       this.retries = options.retries === void 0 ? 2 : Math.max(0, options.retries);
       this.retryDelay = options.retryDelay ?? 600;
       this.fingerprint = createFingerprint(options.fingerprint || "fast");
       this.slice = options.slice;
+      this.completeOnUrl = options.completeOnUrl === void 0 ? Boolean(adapter.completeOnUrl) : Boolean(options.completeOnUrl);
     }
     /**
      * @param {File|Blob} file
      * @param {{onProgress?,onChunk?,onInfo?,signal?}} handlers
-     * @returns {Promise<{url:string, instant?:boolean, chunks:number, size:number, name:string}>}
+     * @returns {Promise<{url:string, instant?:boolean, chunks:number, size:number, name:string, mode:string}>}
      */
     async upload(file, handlers = {}) {
       var _a, _b, _c, _d, _e, _f;
+      if (this.simple) return this.simple.upload(file, handlers);
       const { onProgress, onChunk, signal } = handlers;
-      if (this.adapter.simple) return this.uploadSimple(file, handlers);
       const total = Math.max(1, Math.ceil(file.size / this.chunkSize));
       const meta = {
         name: file.name || "blob",
@@ -3620,8 +5638,8 @@
       };
       const init = await ((_b = (_a = this.adapter).init) == null ? void 0 : _b.call(_a, meta, { signal })) || {};
       if (init.url) {
-        onProgress == null ? void 0 : onProgress(1, { percent: 100, loaded: file.size, total: file.size, chunks: total, instant: true });
-        return { url: init.url, instant: true, chunks: 0, size: file.size, name: meta.name, key: init.key };
+        onProgress == null ? void 0 : onProgress(1, { percent: 100, loaded: file.size, total: file.size, chunks: total, instant: true, mode: "chunk" });
+        return { url: init.url, instant: true, chunks: 0, mode: "chunk", size: file.size, name: meta.name, key: init.key };
       }
       const uploadId = init.uploadId || meta.fingerprint;
       const uploaded = new Set((init.uploadedChunks || init.uploaded || []).map(Number));
@@ -3631,6 +5649,7 @@
       for (let i = 0; i < total; i += 1) if (!uploaded.has(i)) queue.push(i);
       const chunkResults = new Array(total);
       let doneChunks = uploaded.size;
+      let finishedUrl = "";
       const startedAt = Date.now();
       const report = () => {
         const elapsed = (Date.now() - startedAt) / 1e3;
@@ -3640,14 +5659,14 @@
           total: file.size,
           chunks: total,
           uploadedChunks: doneChunks,
-          speed: elapsed > 0 ? loadedBytes / elapsed : 0
+          speed: elapsed > 0 ? loadedBytes / elapsed : 0,
+          mode: "chunk"
         });
       };
       report();
       let cursor = 0;
-      let firstError = null;
       const worker = async () => {
-        while (cursor < queue.length) {
+        while (cursor < queue.length && !finishedUrl) {
           if (signal == null ? void 0 : signal.aborted) throw new DOMException("已取消上传", "AbortError");
           const index = queue[cursor++];
           const blob = this.slice ? this.slice(file, index, this.chunkSize) : file.slice(index * this.chunkSize, (index + 1) * this.chunkSize);
@@ -3666,6 +5685,13 @@
                 size: blob.size
               });
               if (res == null ? void 0 : res.url) chunkResults[index] = res;
+              if ((res == null ? void 0 : res.url) && this.completeOnUrl) {
+                finishedUrl = res.url;
+                doneChunks = total;
+                loadedBytes = file.size;
+                report();
+                break;
+              }
               loadedBytes += blob.size;
               doneChunks += 1;
               onChunk == null ? void 0 : onChunk({ index, total, size: blob.size });
@@ -3675,7 +5701,6 @@
               if ((error == null ? void 0 : error.name) === "AbortError") throw error;
               attempt += 1;
               if (attempt > this.retries) {
-                firstError = error;
                 throw new Error(`分片 ${index + 1}/${total} 上传失败：${(error == null ? void 0 : error.message) || error}`);
               }
               await sleep$1(this.retryDelay * attempt, signal);
@@ -3684,38 +5709,26 @@
         }
       };
       const workers = Array.from({ length: Math.max(1, Math.min(this.concurrency, queue.length)) }, worker);
-      try {
-        await Promise.all(workers);
-      } catch (error) {
-        await ((_d = (_c = this.adapter).abort) == null ? void 0 : _d.call(_c, { uploadId, meta, error }).catch(() => {
+      const settled = await Promise.allSettled(workers);
+      const failure = finishedUrl ? null : settled.find((item) => item.status === "rejected");
+      if (failure) {
+        await ((_d = (_c = this.adapter).abort) == null ? void 0 : _d.call(_c, { uploadId, meta, error: failure.reason }).catch(() => {
         }));
-        throw error;
+        throw failure.reason;
       }
-      if (firstError) throw firstError;
-      const done = await ((_f = (_e = this.adapter).complete) == null ? void 0 : _f.call(_e, { uploadId, meta, total, uploaded: doneChunks, chunkResults, file })) || {};
+      const done = finishedUrl ? { url: finishedUrl } : await ((_f = (_e = this.adapter).complete) == null ? void 0 : _f.call(_e, { uploadId, meta, total, uploaded: doneChunks, chunkResults, file })) || {};
       const url = done.url;
-      if (!url) throw new Error("[KEditor] uploader.complete() 未返回 url");
-      return { url, chunks: total, size: file.size, name: meta.name, key: done.key, poster: done.poster, duration: done.duration, raw: done };
-    }
-    /** 单请求直传（不切片），供对接已有单次上传接口时使用 */
-    async uploadSimple(file, handlers = {}) {
-      const { onProgress, signal } = handlers;
-      const startedAt = Date.now();
-      const result = await this.adapter.upload(file, {
-        signal,
-        onProgress: (loaded, total) => {
-          const ratio = total ? loaded / total : 0;
-          const elapsed = (Date.now() - startedAt) / 1e3;
-          onProgress == null ? void 0 : onProgress(ratio, { percent: Math.round(ratio * 100), loaded, total: total || file.size, chunks: 1, uploadedChunks: ratio >= 1 ? 1 : 0, speed: elapsed > 0 ? loaded / elapsed : 0 });
-        }
-      });
-      const url = typeof result === "string" ? result : result == null ? void 0 : result.url;
-      if (!url) throw new Error("[KEditor] uploader.upload() 未返回 url");
-      return { url, chunks: 1, size: file.size, name: file.name, key: typeof result === "object" ? result.key : void 0, raw: result };
+      if (!url) {
+        throw new Error(
+          this.completeOnUrl ? '[KEditor] 上传结束但接口未返回 url：分片上传要求接口在处理分片时返回 { "url": "…" }' : "[KEditor] uploader.complete() 未返回 url"
+        );
+      }
+      return { url, chunks: total, mode: "chunk", size: file.size, name: meta.name, key: done.key, poster: done.poster, duration: done.duration, raw: done };
     }
     destroy() {
-      var _a, _b;
-      (_b = (_a = this.adapter).destroy) == null ? void 0 : _b.call(_a);
+      var _a, _b, _c;
+      (_a = this.simple) == null ? void 0 : _a.destroy();
+      (_c = (_b = this.adapter).destroy) == null ? void 0 : _c.call(_b);
     }
   }
   const sleep$1 = (ms, signal) => new Promise((resolve, reject) => {
@@ -3767,8 +5780,19 @@
     const objectUrls = /* @__PURE__ */ new Map();
     let failOnce = failFirstChunk;
     const emit = (type, payload) => onEvent == null ? void 0 : onEvent(type, { ...payload, at: Date.now() });
+    const urlFor = (file, meta) => {
+      let url = objectUrls.get(meta.fingerprint);
+      if (!url || !reuseObjectUrl) {
+        const blob = file instanceof File ? file : new File([file], meta.name, { type: meta.type });
+        url = URL.createObjectURL(blob);
+        objectUrls.set(meta.fingerprint, url);
+      }
+      return url;
+    };
+    const remember = (meta, url) => finished.set(meta.fingerprint, { url, name: meta.name, size: meta.size, type: meta.type });
     return {
       name: "mock",
+      /* ---------------- 分片上传链路 ---------------- */
       async init(meta) {
         emit("init", meta);
         await sleep(120);
@@ -3799,15 +5823,37 @@
       },
       async complete({ uploadId, meta, file }) {
         await sleep(140);
-        let url = objectUrls.get(meta.fingerprint);
-        if (!url || !reuseObjectUrl) {
-          const blob = file instanceof File ? file : new File([file], meta.name, { type: meta.type });
-          url = URL.createObjectURL(blob);
-          objectUrls.set(meta.fingerprint, url);
-        }
-        finished.set(meta.fingerprint, { url, name: meta.name, size: meta.size, type: meta.type });
+        const url = urlFor(file, meta);
+        remember(meta, url);
         sessions.delete(uploadId);
         emit("complete", { name: meta.name, url, chunks: meta.totalChunks, size: meta.size });
+        return { url, key: meta.fingerprint };
+      },
+      /* ---------------- 普通上传链路 ---------------- */
+      async upload(file, ctx = {}) {
+        var _a, _b;
+        const meta = {
+          name: file.name || "blob",
+          size: file.size,
+          type: file.type || "application/octet-stream",
+          // 不做哈希：演示用「文件名 + 大小 + 修改时间」即可识别同一份文件
+          fingerprint: `${file.name || "blob"}|${file.size}|${file.lastModified || 0}`
+        };
+        const hit = finished.get(meta.fingerprint);
+        if (hit) {
+          (_a = ctx.onProgress) == null ? void 0 : _a.call(ctx, file.size, file.size);
+          emit("instant", { name: meta.name, url: hit.url });
+          return { url: hit.url, key: meta.fingerprint, instant: true };
+        }
+        const cost = Math.max(140, jitter(latency * 2 + file.size / (speed * 1024 / 8) / 6, 0.3));
+        const steps = 6;
+        for (let i = 1; i <= steps; i += 1) {
+          await sleep(cost / steps);
+          (_b = ctx.onProgress) == null ? void 0 : _b.call(ctx, Math.round(file.size * i / steps), file.size);
+        }
+        const url = urlFor(file, meta);
+        remember(meta, url);
+        emit("upload", { name: meta.name, url, size: meta.size });
         return { url, key: meta.fingerprint };
       },
       async abort({ uploadId }) {
@@ -3821,22 +5867,30 @@
       }
     };
   }
+  function pickUrlOf(payload) {
+    if (!payload || typeof payload !== "object") return "";
+    const value = payload.url || payload.fileUrl || payload.src;
+    return typeof value === "string" ? value.trim() : "";
+  }
+  const LEGACY_FIELDS = ["initUrl", "chunkUrl", "completeUrl", "abortUrl"];
   function httpAdapter(config = {}) {
-    const {
-      initUrl,
-      chunkUrl,
-      completeUrl,
-      abortUrl,
-      mode = "raw",
-      fieldName = "file",
-      headers = {},
-      withCredentials = false,
-      parse = (json) => (json == null ? void 0 : json.data) || json || {},
-      chunkUrlFor
-    } = config;
+    const { url, fieldName = "file", headers = {}, withCredentials = false, parse = (json) => (json == null ? void 0 : json.data) || json || {}, pickUrl = pickUrlOf, chunkUrlFor } = config;
+    const legacy = LEGACY_FIELDS.filter((key) => config[key]);
+    if (legacy.length) {
+      throw new Error(
+        `[KEditor] 分片上传已改为「单接口」模式：请删除 httpAdapter 的 ${legacy.join(" / ")}，只保留 url。服务端在处理分片时返回 { "url": "…" } 即代表上传成功。`
+      );
+    }
+    if (!url) throw new Error('[KEditor] httpAdapter 缺少接口地址：httpAdapter({ url: "/api/upload" })');
+    const mode = config.mode || "formdata";
+    const httpMethod = config.method || (mode === "formdata" ? "POST" : "PUT");
+    const withUrl = (payload) => {
+      const found = (typeof pickUrl === "function" ? pickUrl(payload) : "") || "";
+      return found ? { ...payload && typeof payload === "object" ? payload : {}, url: found } : payload || {};
+    };
     const headerOf = () => typeof headers === "function" ? headers() || {} : headers || {};
-    const request = async (url, init = {}) => {
-      const res = await fetch(url, { credentials: withCredentials ? "include" : "same-origin", ...init });
+    const request = async (target, init = {}) => {
+      const res = await fetch(target, { credentials: withCredentials ? "include" : "same-origin", ...init });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       const text = await res.text();
       if (!text) return {};
@@ -3846,82 +5900,121 @@
         throw new Error(`服务端返回非 JSON 数据：${text.slice(0, 80)}`);
       }
     };
-    return {
-      name: "http",
-      async init(meta, { signal }) {
-        if (!initUrl) throw new Error("[KEditor] httpAdapter 缺少 initUrl");
-        return request(
-          initUrl,
-          {
-            method: "POST",
-            signal,
-            headers: { "Content-Type": "application/json", ...headerOf() },
-            body: JSON.stringify({
-              fileName: meta.name,
-              fileSize: meta.size,
-              fileType: meta.type,
-              lastModified: meta.lastModified,
-              identifier: meta.fingerprint,
-              chunkSize: meta.chunkSize,
-              totalChunks: meta.totalChunks
-            })
-          }
-        );
-      },
-      async put({ uploadId, index, total, blob, meta, signal }) {
-        if (!chunkUrl) throw new Error("[KEditor] httpAdapter 缺少 chunkUrl");
-        const url = typeof chunkUrlFor === "function" ? chunkUrlFor({ uploadId, index }) : chunkUrl;
-        if (mode === "formdata") {
-          const form = new FormData();
-          form.append(fieldName, blob, `${meta.name}.part${index}`);
-          form.append("uploadId", uploadId);
-          form.append("identifier", meta.fingerprint);
+    const withQuery = (target, pairs) => `${target}${target.includes("?") ? "&" : "?"}${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
+    const send = async ({ target, body, name, index, total, meta, signal }) => {
+      if (mode === "formdata") {
+        const form = new FormData();
+        form.append(fieldName, body, index === void 0 ? name : `${name}.part${index}`);
+        form.append("filename", name);
+        form.append("fileSize", String(meta.size));
+        if (meta.identifier) form.append("identifier", meta.identifier);
+        if (index !== void 0) {
           form.append("index", String(index));
           form.append("total", String(total));
-          form.append("filename", meta.name);
-          return request(url, { method: "POST", body: form, signal, headers: headerOf() });
+          form.append("chunkSize", String(meta.chunkSize));
         }
-        const joiner = url.includes("?") ? "&" : "?";
-        const target = `${url}${joiner}uploadId=${encodeURIComponent(uploadId)}&index=${index}&total=${total}&filename=${encodeURIComponent(meta.name)}`;
-        return request(target, {
-          method: "PUT",
-          body: blob,
-          signal,
-          headers: { "Content-Type": "application/octet-stream", "X-Chunk-Index": String(index), ...headerOf() }
-        });
+        return withUrl(await request(target, { method: httpMethod, body: form, signal, headers: headerOf() }));
+      }
+      const query = index === void 0 ? [["filename", name], ["fileSize", meta.size]] : [["identifier", meta.identifier], ["index", index], ["total", total], ["filename", name]];
+      const headersOut = index === void 0 ? { "Content-Type": "application/octet-stream" } : { "Content-Type": "application/octet-stream", "X-Chunk-Index": String(index) };
+      return withUrl(await request(withQuery(target, query), { method: httpMethod, body, signal, headers: { ...headersOut, ...headerOf() } }));
+    };
+    return {
+      name: "http",
+      /** 响应带非空 url 即代表上传成功（分片链路据此提前收工） */
+      completeOnUrl: true,
+      url,
+      /** 普通上传：整个文件一次请求 */
+      async upload(file, ctx = {}) {
+        return send({ target: url, body: file, name: file.name || "file", meta: { size: file.size, identifier: "" }, signal: ctx.signal });
       },
-      async complete({ uploadId, meta, total }) {
-        if (!completeUrl) throw new Error("[KEditor] httpAdapter 缺少 completeUrl");
-        return request(
-          completeUrl,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...headerOf() },
-            body: JSON.stringify({ uploadId, identifier: meta.fingerprint, fileName: meta.name, fileSize: meta.size, fileType: meta.type, chunkSize: meta.chunkSize, totalChunks: total })
-          }
-        );
-      },
-      async abort({ uploadId }) {
-        if (!abortUrl) return;
-        await request(abortUrl, { method: "POST", headers: { "Content-Type": "application/json", ...headerOf() }, body: JSON.stringify({ uploadId }) }).catch(() => {
-        });
+      /** 分片上传：一个分片一次请求 */
+      async put({ index, total, blob, meta, signal }) {
+        const target = typeof chunkUrlFor === "function" ? chunkUrlFor({ index, total }) : url;
+        return send({ target, body: blob, name: meta.name, index, total, meta: { size: meta.size, chunkSize: meta.chunkSize, identifier: meta.fingerprint }, signal });
       }
     };
   }
-  function createUploader(option = "mock", config = {}) {
-    if (option instanceof ChunkUploader) return option;
-    if (typeof option === "function" && !option.put) return new ChunkUploader(simpleAdapter(option), config);
-    if (option && typeof option === "object" && !(option instanceof ChunkUploader)) {
-      if (typeof option.put === "function" || typeof option.upload === "function") return new ChunkUploader(option, { ...config, ...pick(option) });
-      if (option.type === "http") return new ChunkUploader(httpAdapter(option), { ...config, ...pick(option) });
+  const CARRY = ["chunkSize", "concurrency", "retries", "retryDelay", "fingerprint", "completeOnUrl", "slice"];
+  const isUploader = (value) => value instanceof SimpleUploader || value instanceof ChunkUploader;
+  function toAdapter(option, label) {
+    if (option === void 0 || option === null || option === "mock") return mockAdapter({});
+    if (typeof option === "string") {
+      if (!/^(https?:)?\/\//.test(option) && !option.startsWith("/")) {
+        throw new Error(`[KEditor] 无法识别的${label}配置：${option}（接口地址请以 / 或 http(s):// 开头）`);
+      }
+      return httpAdapter({ url: option });
     }
-    return new ChunkUploader(mockAdapter(typeof option === "object" ? option : {}), config);
+    if (typeof option === "function") return simpleAdapter(option);
+    if (typeof option === "object") {
+      if (typeof option.upload === "function" || typeof option.put === "function") return option;
+      if (option.type === "mock") return mockAdapter(option);
+      return httpAdapter(option);
+    }
+    throw new Error(`[KEditor] 无法识别的${label}配置：${typeof option}`);
   }
-  const pick = (obj) => {
-    const out = {};
-    for (const key of ["chunkSize", "concurrency", "retries", "fingerprint"]) if (obj[key] !== void 0) out[key] = obj[key];
+  function carry(config, option) {
+    const out = { ...config || {} };
+    if (option && typeof option === "object") {
+      for (const key of CARRY) if (option[key] !== void 0) out[key] = option[key];
+    }
     return out;
-  };
+  }
+  function createSimpleUploader(option, config = {}) {
+    if (isUploader(option)) return option;
+    return new SimpleUploader(toAdapter(option, "普通上传"), carry(config, option));
+  }
+  function createChunkUploader(option, config = {}) {
+    if (isUploader(option)) return option;
+    return new ChunkUploader(toAdapter(option, "分片上传"), carry(config, option));
+  }
+  class UploadPipeline {
+    constructor(normal, chunk, options = {}) {
+      this.normal = normal || null;
+      this.chunk = chunk || null;
+      this.mode = ["auto", "normal", "chunk"].includes(options.mode) ? options.mode : "auto";
+      this.chunkThreshold = Math.max(0, Number(options.chunkThreshold ?? 5 * 1024 * 1024) || 0);
+      if (options.mode === "chunk" && !this.chunk) console.warn('[KEditor] upload.mode = "chunk" 但未配置 chunkUploader，已回退为普通上传');
+    }
+    /** 该文件走哪条链路：'normal' | 'chunk' */
+    pick(file) {
+      if (!this.chunk) return "normal";
+      if (!this.normal) return "chunk";
+      if (this.mode === "normal") return "normal";
+      if (this.mode === "chunk") return "chunk";
+      return ((file == null ? void 0 : file.size) || 0) >= this.chunkThreshold ? "chunk" : "normal";
+    }
+    uploaderFor(file) {
+      return this.pick(file) === "chunk" ? this.chunk : this.normal;
+    }
+    async upload(file, handlers = {}) {
+      const target = this.uploaderFor(file);
+      if (!target) throw new Error("[KEditor] 未配置上传接口：请设置 uploader（普通上传）或 chunkUploader（分片上传）");
+      const result = await target.upload(file, handlers);
+      return { ...result, mode: target.mode };
+    }
+    destroy() {
+      var _a, _b;
+      (_a = this.normal) == null ? void 0 : _a.destroy();
+      (_b = this.chunk) == null ? void 0 : _b.destroy();
+    }
+  }
+  function createUploaders(options = {}) {
+    const upload = options.upload || {};
+    const normal = createSimpleUploader(options.uploader, upload);
+    const chunk = options.chunkUploader ? createChunkUploader(options.chunkUploader, upload) : null;
+    return { normal, chunk, pipeline: new UploadPipeline(normal, chunk, upload) };
+  }
+  function splitFiles(files) {
+    const docs = [];
+    const media = [];
+    for (const file of files) (isMarkdownFile(file) ? docs : media).push(file);
+    return { docs, media };
+  }
+  async function importDocs(editor, docs) {
+    for (const doc of docs) await editor.importMarkdown(doc);
+    return docs.length;
+  }
   function attachPaste(editor) {
     editor.root.addEventListener("paste", async (event) => {
       if (editor.readOnly || !editor.options.paste.enabled) return;
@@ -3930,9 +6023,12 @@
       event.preventDefault();
       const files = filesFromDataTransfer(dt);
       if (files.length) {
+        const { docs, media } = splitFiles(files);
+        if (docs.length) await importDocs(editor, docs);
+        if (!media.length) return;
         if (editor.options.paste.uploadFiles) {
-          await editor.media.addFiles(files);
-          editor.toast.show(`已上传 ${files.length} 个文件`);
+          await editor.media.addFiles(media);
+          editor.toast.show(`已上传 ${media.length} 个文件`);
         } else {
           editor.toast.warn("当前配置不允许粘贴上传文件");
         }
@@ -4003,8 +6099,10 @@
       placeCaretAtPoint(editor, event);
       const files = [...event.dataTransfer.files || []];
       if (!files.length) return;
-      if (editor.options.paste.uploadFiles) {
-        const count = await editor.media.addFiles(files);
+      const { docs, media } = splitFiles(files);
+      if (docs.length) await importDocs(editor, docs);
+      if (media.length && editor.options.paste.uploadFiles) {
+        const count = await editor.media.addFiles(media);
         if (count) editor.toast.show(`已上传 ${count} 个文件`);
       }
     });
@@ -4045,14 +6143,24 @@
     }
     return doc.body.innerHTML.trim();
   }
+  function initialCodeLang(code) {
+    const list = listLanguages(code.languages);
+    const wanted = normalizeLang(code.defaultLanguage);
+    return list.some((item) => item.value === wanted) ? wanted : list[0].value;
+  }
   const KB = 1024;
   const MB = 1024 * KB;
   const defaults = {
     value: "",
     placeholder: "开始撰写内容，支持拖拽 / 粘贴图片与视频…",
-    height: 460,
-    // 编辑区可视高度（px），0 = 自适应
+    height: 0,
+    // 编辑区可视高度（px）：默认 0 = 随内容自动撑开；填了才固定高度并内部滚动
     minHeight: 320,
+    // 内容区最小高度（px），自适应模式下也生效
+    /** 代码块：可选语言列表、默认语言、是否语法高亮 */
+    code: { languages: [], defaultLanguage: "plaintext", highlight: true },
+    /** Markdown 导入：落点模式（replace 替换全文 | append 追加文末 | cursor 光标处）/ 文件体积上限 / 转换选项 */
+    markdown: { insertMode: "replace", maxSize: 5 * MB, gfm: true, breaks: false, linkTarget: false, frontMatter: true },
     primaryColor: "#07c160",
     paperWidth: 677,
     // 版心基准宽度：窄屏上限、宽屏最小宽度
@@ -4074,9 +6182,20 @@
     wordCount: true,
     sanitize: true,
     historyLimit: 60,
+    /** 普通上传（整个文件一次请求）：'mock' | 接口地址 | {url,…} | adapter | fn */
     uploader: "mock",
-    // 'mock' | {type:'http', ...} | adapter | fn | ChunkUploader
-    upload: { chunkSize: MB, concurrency: 3, retries: 2, fingerprint: "fast" },
+    /** 分片上传（切片并发，接口返回 url 即成功）：同上；null 表示不启用分片 */
+    chunkUploader: "mock",
+    upload: {
+      /** 'auto' 按体积自动选链路 | 'normal' 只走普通上传 | 'chunk' 只走分片上传 */
+      mode: "auto",
+      /** auto 模式下达到该体积才走分片上传 */
+      chunkThreshold: 5 * MB,
+      chunkSize: MB,
+      concurrency: 3,
+      retries: 2,
+      fingerprint: "fast"
+    },
     image: { compress: { maxWidth: 1440, quality: 0.85, minSize: 300 * KB } },
     maxImageSize: 20 * MB,
     maxVideoSize: 512 * MB,
@@ -4098,6 +6217,7 @@
       injectStyle();
       this.options = mergeOptions(options);
       this.id = `ke-${instanceSeq += 1}`;
+      this.lastCodeLang = initialCodeLang(this.options.code);
       this.el = resolveTarget(target, this.id);
       this.el.__keditor__ = this;
       const hostHTML = this.el.innerHTML;
@@ -4112,7 +6232,9 @@
       this.toast = new Toast();
       this.popover = new Popover(this.el);
       this.commands = new Commands(this);
-      this.uploader = createUploader(this.options.uploader, this.options.upload);
+      const uploads = createUploaders(this.options);
+      this.uploaders = { normal: uploads.normal, chunk: uploads.chunk };
+      this.uploader = uploads.pipeline;
       this.media = createMedia(this);
       this.history = new History(this.root, { limit: this.options.historyLimit });
       this.toolbar = new Toolbar(this, this.options.toolbar, this.options.customButtons);
@@ -4161,12 +6283,34 @@
       this.el.appendChild(this.mainEl);
       if (!this.options.hideStatusbar) this.el.appendChild(this.statusEl);
       this.el.appendChild(this.dropzoneEl);
-      if (this.options.height) {
-        this.scrollEl.style.height = `${this.options.height}px`;
-        this.scrollEl.style.maxHeight = `${this.options.height}px`;
-      }
       this.paperEl.style.setProperty("--ke-min-height", `${this.options.minHeight}px`);
+      this.applyHeight();
       this.applyPaper();
+    }
+    /**
+     * 内容区高度：height 未配置（0）时随内容自动撑开，整页滚动；
+     * 配置了 height 才固定高度，内容超出时在编辑区内部滚动
+     */
+    applyHeight() {
+      const height = normalizeHeight(this.options.height);
+      if (height > 0) {
+        this.scrollEl.style.height = `${height}px`;
+        this.scrollEl.style.maxHeight = `${height}px`;
+      } else {
+        this.scrollEl.style.height = "";
+        this.scrollEl.style.maxHeight = "";
+      }
+      this.el.classList.toggle("ke-is-auto", height === 0);
+      return height;
+    }
+    /** 运行时切换内容区高度：传 px 固定，传 0 / 'auto' 恢复自适应 */
+    setHeight(value) {
+      this.options.height = normalizeHeight(value);
+      return this.applyHeight();
+    }
+    /** 当前内容区高度配置：0 表示自适应 */
+    heightOptions() {
+      return { height: normalizeHeight(this.options.height), auto: normalizeHeight(this.options.height) === 0 };
     }
     /** 版心尺寸：宽屏下默认让版心随容器生长，两侧只保留固定留白 */
     applyPaper() {
@@ -4196,12 +6340,20 @@
     /* ------------------------------ 事件 ------------------------------ */
     bindEvents() {
       const debouncedChange = debounce(() => this.emitChange(), 160);
-      this.bind(this.root, "input", () => {
+      this.bind(this.root, "input", (event) => {
         this.history.snapshot();
         this.refreshStatus();
         this.togglePlaceholder();
+        this.queueCodeHighlight(event);
         debouncedChange();
         this.enforceMaxLength();
+      });
+      this.bind(this.root, "compositionstart", () => {
+        this.composing = true;
+      });
+      this.bind(this.root, "compositionend", (event) => {
+        this.composing = false;
+        this.queueCodeHighlight(event);
       });
       this.bind(this.root, "keydown", (event) => this.handleKeydown(event));
       this.bind(this.root, "blur", () => {
@@ -4335,7 +6487,8 @@
         source: this.sourceMode,
         preview: this.previewMode,
         fullscreen: this.fullscreen,
-        readOnly: this.readOnly
+        readOnly: this.readOnly,
+        inCode: !!codeBlockAt(this.root)
       };
     }
     queryState(command) {
@@ -4387,8 +6540,8 @@
     /* ------------------------------ 内容 API ------------------------------ */
     getHTML({ clean = true } = {}) {
       const html = this.root.innerHTML;
-      if (!clean) return html;
-      return exportHtml(html);
+      if (clean === false) return html;
+      return exportHtml(html, { keepHighlight: clean === "preview" });
     }
     getText() {
       return toPlainText(this.root.innerHTML);
@@ -4399,6 +6552,7 @@
     setContent(html, { sanitize = this.options.sanitize, silent = false } = {}) {
       const value = sanitizeHtml(html || "<p><br></p>", { allowEmpty: true });
       this.root.innerHTML = value || "<p><br></p>";
+      this.highlightCode();
       this.afterEdit({ silent });
       if (!silent) this.history.snapshot(true);
       this.togglePlaceholder();
@@ -4500,6 +6654,111 @@
       this.refresh();
       return this;
     }
+    /* ------------------------------ 代码块 ------------------------------ */
+    /** 可选语言清单（可用 options.code.languages 裁剪） */
+    codeLanguages() {
+      return listLanguages(this.options.code.languages);
+    }
+    /** 高亮正文中所有代码块（内容整体替换后调用） */
+    highlightCode() {
+      return highlightCodeBlocks(this.root, { highlight: this.options.code.highlight !== false });
+    }
+    /** 插入代码块：code 为源码，lang 缺省用 code.defaultLanguage */
+    insertCode(code = "", lang) {
+      return this.commands.insertCodeBlock(code, lang);
+    }
+    /** 切换代码块语言并重新高亮；不传目标时取光标所在代码块，返回 null 表示不在代码块中 */
+    setCodeLanguage(lang, target) {
+      return this.commands.setCodeLanguage(lang, target);
+    }
+    /** 光标所在代码块的语言；不在代码块中返回空串 */
+    getCodeLanguage() {
+      return this.commands.currentCodeLang();
+    }
+    /** 在代码块内输入时重新高亮（保持块内光标）；输入法组字期间跳过 */
+    queueCodeHighlight(event) {
+      if ((event == null ? void 0 : event.isComposing) || this.composing) return;
+      const block = codeBlockAt(this.root);
+      if (!block) return;
+      clearTimeout(this.codeTimer);
+      this.codeTimer = setTimeout(() => {
+        this.codeTimer = null;
+        if (!this.destroyed) refreshCodeBlock(block, { caret: true });
+      }, 140);
+    }
+    /* ------------------------------ 导入 Markdown ------------------------------ */
+    /** 落点模式：replace 替换全文（默认）| append 追加到文末 | cursor 插入到光标处 */
+    markdownOptions() {
+      const { insertMode, maxSize } = this.options.markdown;
+      return { insertMode: normalizeInsertMode(insertMode), maxSize, auto: insertMode === "replace" };
+    }
+    /**
+     * 导入 Markdown 并转为 HTML：source 可为字符串或 File/Blob（.md / .txt）
+     * 返回 { ok, html, summary, mode, chars, name }；失败时 ok=false
+     */
+    async importMarkdown(source, { mode = this.options.markdown.insertMode, silent = false } = {}) {
+      if (this.readOnly) {
+        this.toast.warn("只读模式不能导入内容");
+        return { ok: false, reason: "readonly" };
+      }
+      const place = normalizeInsertMode(mode);
+      let text = "";
+      let name = "";
+      try {
+        if (typeof source === "string") {
+          text = source;
+        } else if (source && typeof source.arrayBuffer === "function") {
+          name = source.name || "";
+          const limit = this.options.markdown.maxSize;
+          if (limit && source.size > limit) throw new Error(`${name || "文件"} 超出大小限制（${formatSize(limit)}）`);
+          text = await readMarkdownFile(source);
+        } else if (source && typeof source.content === "string") {
+          text = source.content;
+          name = source.name || "";
+        } else {
+          throw new Error("导入内容必须是 Markdown 文本或文件");
+        }
+        const html = markdownToHtml(text, this.options.markdown);
+        if (!html.trim()) throw new Error("没有解析到可用内容");
+        if (place === "replace") this.setContent(html);
+        else {
+          if (place === "append") this.moveCaretToEnd();
+          this.commands.insertHTML(html);
+          this.highlightCode();
+        }
+        this.focus();
+        this.history.snapshot(true);
+        const summary = markdownSummary(html);
+        if (!silent) this.toast.show(`已导入${name ? ` ${name}` : " Markdown"}（${summary.paragraphs + summary.headings} 个段落）`);
+        this.emit("markdownimport", { mode: place, name, summary, chars: text.length });
+        return { ok: true, html, summary, mode: place, chars: text.length, name };
+      } catch (error) {
+        this.reportError("markdown", error);
+        return { ok: false, reason: "error", error, name };
+      }
+    }
+    /** 导入并替换全文 */
+    setMarkdown(source, options = {}) {
+      return this.importMarkdown(source, { mode: "replace", ...options });
+    }
+    /** 导入并插入到光标处 */
+    insertMarkdown(source, options = {}) {
+      return this.importMarkdown(source, { mode: "cursor", ...options });
+    }
+    /** 导入并追加到文末 */
+    appendMarkdown(source, options = {}) {
+      return this.importMarkdown(source, { mode: "append", ...options });
+    }
+    /** 光标 / 选区移到正文末尾（追加导入用） */
+    moveCaretToEnd() {
+      const range = document.createRange();
+      range.selectNodeContents(this.root);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return this;
+    }
     /* ------------------------------ 媒体快捷入口 ------------------------------ */
     /** 上传任意文件（自动识别图片/视频），等价于点击工具栏上传 */
     upload(file, kind = this.media.kindOf(file)) {
@@ -4588,7 +6847,7 @@
     }
     openPreview() {
       this.previewMode = true;
-      this.previewPanel.show(previewHtml(this.getHTML()));
+      this.previewPanel.show(previewHtml(this.getHTML({ clean: "preview" })));
       this.refresh();
     }
     closePreview() {
@@ -4643,9 +6902,12 @@
       return this.el;
     }
     destroy() {
+      var _a;
       if (this.destroyed) return;
       this.destroyed = true;
       this.media.destroy();
+      (_a = this.uploader) == null ? void 0 : _a.destroy();
+      clearTimeout(this.codeTimer);
       this.history.destroy();
       this.popover.destroy();
       this.source.destroy();
@@ -4706,11 +6968,26 @@
     if ((target == null ? void 0 : target.$el) instanceof HTMLElement) return target.$el;
     throw new Error(`[KEditor] 无效的挂载目标（${typeof target}）`);
   }
+  function normalizeHeight(value) {
+    if (value === "" || value === null || value === void 0 || value === "auto") return 0;
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    return clamp$1(Math.round(num), 0, 4e3);
+  }
   function mergeOptions(options) {
+    var _a;
     const out = { ...defaults, ...options };
     out.image = { ...defaults.image, ...options.image || {} };
     out.paste = { ...defaults.paste, ...options.paste || {} };
     out.upload = { ...defaults.upload, ...options.upload || {} };
+    const explicitNormal = options.uploader !== void 0;
+    const explicitChunk = options.chunkUploader !== void 0;
+    if (explicitNormal && !explicitChunk) out.chunkUploader = null;
+    if (!explicitNormal && explicitChunk && ((_a = options.upload) == null ? void 0 : _a.mode) === void 0) out.upload.mode = "chunk";
+    out.code = { ...defaults.code, ...options.code || {} };
+    out.markdown = { ...defaults.markdown, ...options.markdown || {} };
+    out.markdown.insertMode = normalizeInsertMode(out.markdown.insertMode);
+    out.markdown.maxSize = Math.max(0, Number(out.markdown.maxSize) || 0);
     out.customButtons = normalizeCustomButtons(options.customButtons);
     if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar;
     if (options.toolbar === false) out.toolbar = [];
@@ -4718,7 +6995,7 @@
     if (out.customButtons.length && options.toolbar !== false) {
       out.toolbar = placeCustomNames(out.toolbar, out.customButtons);
     }
-    out.height = clamp$1(out.height ?? 460, 0, 4e3);
+    out.height = normalizeHeight(out.height);
     out.paperWidth = clamp$1(Number(out.paperWidth) || defaults.paperWidth, 200, 8e3);
     out.paperMode = out.paperMode === "fixed" ? "fixed" : "fluid";
     out.paperGap = Number.isFinite(Number(out.paperGap)) ? clamp$1(Number(out.paperGap), 0, 600) : defaults.paperGap;
@@ -4833,7 +7110,7 @@
     const latin = (text.match(/[a-zA-Z0-9'’-]+/g) || []).length;
     return cjk + latin;
   }
-  function exportHtml(html) {
+  function exportHtml(html, { keepHighlight = false } = {}) {
     const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
     const root = doc.body.firstChild;
     root.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
@@ -4842,6 +7119,7 @@
     root.querySelectorAll("[data-ke-marker]").forEach((n) => n.removeAttribute("data-ke-marker"));
     root.querySelectorAll("[data-placeholder]").forEach((n) => n.removeAttribute("data-placeholder"));
     root.querySelectorAll(".ke-is-selected-media").forEach((n) => n.classList.remove("ke-is-selected-media"));
+    if (!keepHighlight) stripHighlight(root);
     root.querySelectorAll('[data-k-state="uploading"], [data-k-state="error"]').forEach((n) => n.remove());
     return root.innerHTML.trim();
   }
@@ -4867,23 +7145,38 @@
   exports2.ChunkUploader = ChunkUploader;
   exports2.DEFAULT_TOOLBAR = DEFAULT_TOOLBAR;
   exports2.KEditor = KEditor;
+  exports2.LANGUAGES = LANGUAGES;
+  exports2.MARKDOWN_ACCEPT = MARKDOWN_ACCEPT;
+  exports2.SimpleUploader = SimpleUploader;
+  exports2.UploadPipeline = UploadPipeline;
   exports2.cleanWordHtml = cleanWordHtml;
   exports2.create = create;
-  exports2.createUploader = createUploader;
+  exports2.createChunkUploader = createChunkUploader;
+  exports2.createSimpleUploader = createSimpleUploader;
   exports2.default = KEditor;
   exports2.defaults = defaults;
   exports2.escapeHtml = escapeHtml;
   exports2.exportHtml = exportHtml;
   exports2.fastFingerprint = fastFingerprint;
   exports2.formatHtml = formatHtml;
+  exports2.highlightCode = highlightCode;
   exports2.httpAdapter = httpAdapter;
+  exports2.isCodeBlock = isCodeBlock;
+  exports2.isMarkdownFile = isMarkdownFile;
   exports2.isSafeUrl = isSafeUrl;
+  exports2.languageLabel = languageLabel;
+  exports2.listLanguages = listLanguages;
+  exports2.markdownSummary = markdownSummary;
+  exports2.markdownToHtml = markdownToHtml;
   exports2.maybeCompress = maybeCompress;
   exports2.mockAdapter = mockAdapter;
   exports2.mount = mount;
   exports2.normalizeCustomButtons = normalizeCustomButtons;
+  exports2.normalizeInsertMode = normalizeInsertMode;
   exports2.normalizeItems = normalizeItems;
+  exports2.normalizeLang = normalizeLang;
   exports2.normalizePosition = normalizePosition;
+  exports2.readMarkdownFile = readMarkdownFile;
   exports2.replace = replace;
   exports2.sanitizeHtml = sanitizeHtml;
   exports2.simpleAdapter = simpleAdapter;

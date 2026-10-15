@@ -24,12 +24,12 @@ KEditor 是**纯前端**编辑器，不依赖任何后端接口。三种集成�
   <body>
     <div id="editor"></div>
 
-    <!-- 线上用压缩版（139 KB / gzip 43 KB）；断点调试换成 dist/keditor.umd.js 即可，API 完全一致 -->
+    <!-- 线上用压缩版（192 KB / gzip 61 KB）；断点调试换成 dist/keditor.umd.js 即可，API 完全一致 -->
     <script src="dist/keditor.umd.min.js"></script>
     <script>
       const editor = KEditor.create('#editor', {
         placeholder: '开始撰写内容…',
-        height: 460,
+        // 高度默认随内容自动撑开；要固定高度 + 内部滚动就加上 height: 460
       })
 
       editor.on('change', ({ html }) => console.log(html))
@@ -67,8 +67,9 @@ import { KEditor, create, mockAdapter } from 'kyle-editor'
 
 const editor = create('#editor', {
   value: '<p>hello</p>',
-  uploader: mockAdapter({ speed: 8 }),          // 演示：不请求后端
-  upload: { chunkSize: 256 * 1024, concurrency: 3 },
+  uploader: mockAdapter({ speed: 8 }),          // 演示：不请求后端（普通上传）
+  chunkUploader: mockAdapter({ speed: 8 }),     // 演示：分片上传
+  upload: { mode: 'auto', chunkSize: 256 * 1024, concurrency: 3 },
 })
 
 // 组件卸载时务必销毁
@@ -134,9 +135,11 @@ const form = ref({ content: '<p>初始内容</p>' })
 const readonly = ref(false)
 const editorOptions = {
   placeholder: '支持拖拽 / 粘贴上传…',
-  height: 420,
-  uploader: { type: 'http', initUrl: '/api/upload/init', chunkUrl: '/api/upload/chunk', completeUrl: '/api/upload/complete' },
-  upload: { chunkSize: 1024 * 1024, concurrency: 3, retries: 2 },
+  height: 420,   // 不写则随内容自动撑开
+  // 上传分两条链路，各自配置；小文件走普通上传，大文件自动切片
+  uploader: '/api/upload',                    // 普通上传：整个文件一次请求
+  chunkUploader: '/api/chunk-upload',         // 分片上传：响应里 url 非空即成功
+  upload: { mode: 'auto', chunkThreshold: 5 * 1024 * 1024, chunkSize: 1024 * 1024, concurrency: 3, retries: 2 },
 }
 const onUpload = (payload) => console.log(payload.stage, payload.percent)
 const onReady = (editor) => console.log('编辑器实例', editor)
@@ -181,7 +184,7 @@ const { host, editor } = useKEditor({ height: 400 })
 | `modelValue` | `string` | HTML 字符串，`v-model` 绑定；外部变更会同步进编辑器 |
 | `options` | `object` | 与 `new KEditor(el, options)` 完全一致的配置 |
 | `disabled` | `boolean` | 只读模式 |
-| `height` | `number` | 覆盖 `options.height` |
+| `height` | `number` | 覆盖 `options.height`（默认自适应内容高度） |
 
 | Emit | 载荷 | 说明 |
 |------|------|------|
@@ -250,9 +253,10 @@ export default function Page() {
 import KEditor, { type KEditorOptions, type UploadAdapter, type UploadResult } from 'kyle-editor'
 
 const options: KEditorOptions = {
-  height: 480,
-  upload: { chunkSize: 2 * 1024 * 1024, concurrency: 4 },
-  uploader: myAdapter,          // 满足 UploadAdapter 接口即可
+  height: 480,   // 0 / 不写 = 随内容自动撑开
+  upload: { mode: 'auto', chunkSize: 2 * 1024 * 1024, concurrency: 4 },
+  uploader: myAdapter,          // 普通上传（满足 upload() 即可）
+  chunkUploader: myChunkAdapter, // 分片上传（满足 put() 即可）
 }
 
 const editor = KEditor.create('#editor', options)
@@ -269,10 +273,16 @@ UMD 方式（无构建）下若需提示，可 `/// <reference types="kyle-edito
 ## 4. 常见问题
 
 **Q：不需要后端，怎么让图片真的显示出来？**
-默认 `uploader: 'mock'` 会在浏览器内完成切片并生成 `blob:` 地址，页面内可直接预览。保存草稿时把 `getHTML()` 存下来即可；正式上线时换成 `httpAdapter` 就会得到 CDN 地址。
+默认 `uploader` / `chunkUploader` 都是 `'mock'`，在浏览器内完成传输并生成 `blob:` 地址，页面内可直接预览。保存草稿时把 `getHTML()` 存下来即可；正式上线时把两者换成后端接口地址（如 `uploader: '/api/upload'`、`chunkUploader: '/api/chunk-upload'`），接口返回 `url` 就会得到真实（CDN）地址。
+
+**Q：只想配一个上传接口，不要分片？**
+只设 `uploader` 即可 —— 分片链路自动不启用（不会用默认 mock 顶上），所有文件都走整包一次请求。
+
+**Q：想让所有文件都走分片上传？**
+只设 `chunkUploader` 即可（`upload.mode` 自动为 `'chunk'`）；想显式写清楚就加 `upload: { mode: 'chunk' }`。
 
 **Q：`blob:` 地址提交到服务器会失效，怎么办？**
-在提交前调用 `editor.getHTML()`，把 `data-k-url` 为 `blob:` 的资源先上传（`beforeUpload` 里做映射），或直接配置真实 `uploader`。
+在提交前调用 `editor.getHTML()`，把 `data-k-url` 为 `blob:` 的资源先上传（`beforeUpload` 里做映射），或直接配置真实上传接口。
 
 **Q：如何精简工具栏？**
 ```js
@@ -281,7 +291,7 @@ KEditor.create('#editor', { toolbar: ['undo', 'redo', '|', 'bold', 'image', 'vid
 
 `'|'` 为分隔符，`':tail'` 之后的按钮靠右对齐（窄屏下吸附在右端不会被滚走），`toolbar: false` 隐藏工具栏。工具栏放不下时可左右滑动，并有滚动条、边缘渐隐、首次引导气泡等提示，详见 [api.md](api.md#工具栏项)。
 
-可用项：`undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor` `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video` `table` `code` `hr` `clear` `source` `preview` `fullscreen`，详见 [api.md](api.md#工具栏项)。
+可用项：`undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor` `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video` `table` `code` `markdown` `hr` `clear` `source` `preview` `fullscreen`，详见 [api.md](api.md#工具栏项)。
 
 > `preview` 已从默认工具栏（`KEditor.DEFAULT_TOOLBAR`）里移除，需要它在 `toolbar` 数组里写回，或直接调 `editor.openPreview()`。自定义按钮可用 `position` / `editor.moveButton()` 放到任意位置，包括 `:tail` 吸附区。
 

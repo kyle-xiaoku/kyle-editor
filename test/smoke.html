@@ -103,9 +103,9 @@
       const editor = KEditor.create('#editor', {
         value: '<p>初始内容</p>',
         height: 260,
-        uploader,
+        chunkUploader: uploader, // 分片上传链路
         image: { compress: false },
-        upload: { chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
+        upload: { mode: 'chunk', chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
       })
 
       // ---- 辅助：把光标放到末尾并选中整段 ----
@@ -165,7 +165,8 @@
         check('插入表格', /<table[\s\S]*?<td/.test(editor.getHTML()), (editor.getHTML().match(/<t[dh]/g) || []).length + ' 个单元格')
 
         editor.commands.insertCodeBlock()
-        check('插入代码块', /<pre><code/.test(editor.getHTML()), '')
+        check('插入代码块', /<pre data-k-lang="plaintext"><code[^>]*>/.test(editor.getHTML()), editor.getHTML().slice(0, 80))
+        check('plaintext 不做高亮（占位文字原样保留）', !/ke-tok-/.test(editor.getHTML()), editor.getHTML().slice(0, 80))
 
         editor.commands.insertDivider()
         check('插入分割线', /<hr/.test(editor.getHTML()), '')
@@ -243,8 +244,8 @@
 
         // 取消上传
         const slow = KEditor.create(document.createElement('div'), {
-          uploader: KEditor.mockAdapter({ speed: 0.6, latency: 200 }),
-          upload: { chunkSize: 128 * 1024 },
+          chunkUploader: KEditor.mockAdapter({ speed: 0.6, latency: 200 }),
+          upload: { mode: 'chunk', chunkSize: 128 * 1024 },
           image: { compress: false },
         })
         const task = await (async () => {
@@ -505,9 +506,9 @@
         // beforeUpload 钩子
         let hookCalled = 0
         const hooked = KEditor.create(document.createElement('div'), {
-          uploader,
+          chunkUploader: uploader,
           image: { compress: false },
-          upload: { chunkSize: 256 * 1024 },
+          upload: { mode: 'chunk', chunkSize: 256 * 1024 },
           beforeUpload: (file, kind) => {
             hookCalled += 1
             return kind === 'video' ? false : file
@@ -552,6 +553,240 @@
             prioEd.getText().slice(0, 40),
           )
           prioEd.destroy()
+        }
+
+        /* ---------------- 上传：普通上传 / 分片上传，两条链路各自配置 ---------------- */
+        // 需求：上传分为普通上传与分片上传，可单独配置；分片上传只需一个后端接口，响应里 url 非空即成功
+        {
+          const upErrorsBefore = jsErrors.length
+          const realFetch = window.fetch
+          const CS = 64 * 1024
+          const mkFile = (size, name = 'a.png', type = 'image/png') => noiseFile(name, type, size)
+          // 服务端桩：记录每次请求（普通上传 = 整包，分片上传 = 单片）
+          const stub = (rule) => {
+            const calls = []
+            window.fetch = async (url, init = {}) => {
+              const form = init.body instanceof FormData ? init.body : null
+              const query = new URL(String(url), location.origin).searchParams
+              const call = {
+                url: String(url),
+                method: init.method,
+                form,
+                index: Number(form ? form.get('index') : query.get('index')),
+                total: Number(form ? form.get('total') : query.get('total')),
+                hasIndex: form ? form.has('index') : query.has('index'),
+                identifier: form ? form.get('identifier') : query.get('identifier'),
+                filename: form ? form.get('filename') : query.get('filename'),
+                chunkSize: form ? form.get('chunkSize') : '',
+                chunk: form ? form.get('file') : init.body,
+              }
+              calls.push(call)
+              const payload = rule(call, calls) || {}
+              return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify(payload) }
+            }
+            return calls
+          }
+
+          try {
+            /* ---- 普通上传：整个文件一次请求 ---- */
+            {
+              const calls = stub(() => ({ data: { url: 'https://cdn.example.com/whole.png' } }))
+              const up = KEditor.createSimpleUploader('/api/upload')
+              check('普通上传：字符串地址直接可用', up.mode === 'normal' && typeof up.upload === 'function', `mode=${up.mode}`)
+              const file = mkFile(CS * 6, 'whole.png')
+              const res = await up.upload(file)
+              check('普通上传：整个文件只发一次请求', calls.length === 1, `${calls.length} 次请求（文件 ${file.size}B）`)
+              check('普通上传：一包发完不分片', calls[0].chunk?.size === file.size && !calls[0].hasIndex, `载荷 ${calls[0].chunk?.size}B / 带 index=${calls[0].hasIndex}`)
+              check('普通上传：响应里的 url 即上传结果', res.url === 'https://cdn.example.com/whole.png' && res.mode === 'normal' && res.chunks === 1, String(res.url))
+              check(
+                '普通上传：multipart 带文件名与体积',
+                calls[0].method === 'POST' && calls[0].filename === 'whole.png' && Number(calls[0].form.get('fileSize')) === file.size && !calls[0].identifier,
+                `method=${calls[0].method} filename=${calls[0].filename} size=${calls[0].form.get('fileSize')}`,
+              )
+            }
+
+            // 普通上传：接口没返回 url → 必须失败，不能静默当成功
+            {
+              stub(() => ({}))
+              let err = ''
+              try {
+                await KEditor.createSimpleUploader({ url: '/api/upload' }).upload(mkFile(CS * 2))
+              } catch (e) {
+                err = e.message
+              }
+              check('普通上传：接口没有 url 视为失败', /未返回 url/.test(err), err.slice(0, 70))
+            }
+
+            // 普通上传：raw 模式（裸 body + 查询串）与函数写法
+            {
+              const calls = stub(() => ({ payload: { filePath: 'https://cdn.example.com/raw.bin' } }))
+              const up = new KEditor.SimpleUploader(KEditor.httpAdapter({ url: '/api/put', mode: 'raw', pickUrl: (json) => json?.payload?.filePath || '' }))
+              const res = await up.upload(mkFile(CS * 3, 'raw.bin'))
+              check('普通上传：raw 模式把文件名放进查询串', res.url === 'https://cdn.example.com/raw.bin' && /filename=raw\.bin/.test(calls[0].url), calls[0].url)
+              check('普通上传：raw 模式整包 PUT', calls[0].method === 'PUT' && calls[0].chunk?.size === CS * 3, `${calls[0].method} ${calls[0].chunk?.size}B`)
+              const fnUp = KEditor.createSimpleUploader((file) => `https://cdn.example.com/${file.name}`)
+              const fnRes = await fnUp.upload(mkFile(1024, 'fn.png'))
+              check('普通上传：函数写法 = 一次请求直传', fnRes.url === 'https://cdn.example.com/fn.png', String(fnRes.url))
+            }
+
+            /* ---- A. 分片上传：只配一个地址 ---- */
+            {
+              const calls = stub((c) => (c.index === 2 ? { data: { url: 'https://cdn.example.com/a.png', key: 'k/a.png' } } : {}))
+              const up = KEditor.createChunkUploader('/api/upload', { chunkSize: CS, concurrency: 1, retries: 0 })
+              check('字符串地址 = 单接口分片上传', up.adapter.completeOnUrl === true && up.mode === 'chunk', `completeOnUrl=${up.adapter.completeOnUrl}`)
+              const res = await up.upload(mkFile(CS * 6))
+              check('单接口：接口返回 url 即上传成功', res.url === 'https://cdn.example.com/a.png', String(res.url))
+              check('单接口：命中后不再上传剩余分片', calls.length === 3, `${calls.length} 次请求 / 共 6 片`)
+              check(
+                '单接口：分片走 multipart 且上下文齐全',
+                calls.every((c) => c.form && c.method === 'POST' && c.identifier && c.filename === 'a.png' && c.total === 6 && Number(c.chunkSize) === CS && c.chunk?.size > 0),
+                `method=${calls[0].method} total=${calls[0].total} filename=${calls[0].filename} chunk=${calls[0].chunk?.size}B`,
+              )
+              check('单接口：所有分片打到同一个地址', new Set(calls.map((c) => c.url)).size === 1, `${calls[0].url} ×${calls.length}`)
+            }
+
+            // B. 接口全程不返回 url → 必须失败，不能静默当成功
+            {
+              const calls = stub(() => ({}))
+              let err = ''
+              try {
+                await KEditor.createChunkUploader({ type: 'http', url: '/api/upload' }, { chunkSize: CS, concurrency: 1, retries: 0 }).upload(mkFile(CS * 3))
+              } catch (e) {
+                err = e.message
+              }
+              check('单接口：接口没有 url 视为失败', /未返回 url/.test(err), err.slice(0, 70))
+              check('单接口：失败前每个分片都尝试过', calls.length === 3, `${calls.length}/3 片`)
+            }
+
+            // C. 秒传：首个响应就带 url
+            {
+              const calls = stub(() => ({ url: 'https://cdn.example.com/instant.png' }))
+              const res = await KEditor.createChunkUploader('/api/upload', { chunkSize: CS, concurrency: 2, retries: 0 }).upload(mkFile(CS * 4))
+              check('单接口：一上来就有 url 立即结束', res.url === 'https://cdn.example.com/instant.png', String(res.url))
+              check('单接口：立即结束后不再发剩余分片', calls.length <= 2, `${calls.length} 次请求（并发 2 / 共 4 片）`)
+            }
+
+            // D. 自定义取 url 规则 + raw 模式（地址带查询串）
+            {
+              const calls = stub(() => ({ code: 0, payload: { filePath: 'https://cdn.example.com/x.mp4' } }))
+              const up = new KEditor.ChunkUploader(
+                KEditor.httpAdapter({ url: '/api/upload', mode: 'raw', pickUrl: (json) => json?.payload?.filePath || '' }),
+                { chunkSize: CS, concurrency: 1, retries: 0 },
+              )
+              const res = await up.upload(mkFile(CS * 2, 'x.mp4', 'video/mp4'))
+              check('单接口：支持自定义取 url 字段', res.url === 'https://cdn.example.com/x.mp4', String(res.url))
+              check(
+                '单接口：raw 模式把上下文放在查询串',
+                /[?&]index=0&/.test(calls[0]?.url || '') && /filename=x\.mp4/.test(calls[0]?.url || ''),
+                calls[0]?.url,
+              )
+            }
+
+            // E. 已移除的三接口模式：旧配置必须明确报错，而不是静默失效
+            {
+              let err = ''
+              try {
+                KEditor.httpAdapter({ initUrl: '/init', chunkUrl: '/chunk', completeUrl: '/complete' })
+              } catch (e) {
+                err = e.message
+              }
+              check('三接口字段已移除并给出迁移提示', /单接口/.test(err) && /initUrl/.test(err), err.slice(0, 72))
+              let err2 = ''
+              try {
+                KEditor.createChunkUploader({})
+              } catch (e) {
+                err2 = e.message
+              }
+              check('分片上传未给接口地址时报错', /缺少接口地址/.test(err2), err2.slice(0, 60))
+            }
+
+            // F. 编辑器内端到端：按体积在两条链路之间自动选路
+            {
+              const calls = stub((c) => (c.hasIndex ? (c.index === c.total - 1 ? { data: { url: 'https://cdn.example.com/e2e.png' } } : {}) : { data: { url: 'https://cdn.example.com/whole.png' } }))
+              const hostE = document.createElement('div')
+              hostE.style.cssText = 'position:fixed;left:-9999px;top:0;width:820px'
+              document.body.appendChild(hostE)
+              const edE = KEditor.create(hostE, {
+                value: '',
+                uploader: '/api/upload', // 普通上传
+                chunkUploader: '/api/chunk', // 分片上传
+                upload: { mode: 'auto', chunkThreshold: CS * 4, chunkSize: CS, concurrency: 2, retries: 0 },
+                image: { compress: false },
+              })
+              check('选路：小于阈值走普通上传', edE.uploader.pick(mkFile(CS)) === 'normal', `阈值 ${CS * 4}B`)
+              check('选路：达到阈值走分片上传', edE.uploader.pick(mkFile(CS * 4)) === 'chunk', '')
+              const small = await edE.media.upload(mkFile(CS * 2, 'small.png'), 'image')
+              check('编辑器：小文件一次请求拿到地址', calls.length === 1 && small?.url === 'https://cdn.example.com/whole.png', `${calls.length} 次 / ${small?.url}`)
+              check('编辑器：小文件打的是普通上传接口', calls[0]?.url === '/api/upload', calls[0]?.url)
+              calls.length = 0
+              const big = await edE.media.upload(mkFile(CS * 8, 'big.png'), 'image')
+              check('编辑器：大文件走分片上传接口', calls.length > 1 && calls.every((c) => c.url === '/api/chunk'), `${calls.length} 次 / ${calls[0]?.url}`)
+              check('编辑器：大文件拿到分片接口给的地址', big?.url === 'https://cdn.example.com/e2e.png' && big?.mode === 'chunk', `${big?.url} / ${big?.mode}`)
+              check('正文图片使用接口返回的地址', /src="https:\/\/cdn\.example\.com\/(e2e|whole)\.png"/.test(edE.getHTML()), edE.getHTML().slice(0, 110))
+              check('上传结束后不残留占位块', edE.media.tasks.size === 0, String(edE.media.tasks.size))
+              edE.destroy()
+              hostE.remove()
+              check('上传流程无新增运行时错误', jsErrors.length === upErrorsBefore, jsErrors.slice(upErrorsBefore).join(' | ').slice(0, 200))
+            }
+
+            // G. 强制链路 / 缺分片接口时的回退
+            {
+              stub(() => ({ url: 'https://cdn.example.com/force.png' }))
+              const mk = (opts) => KEditor.create(document.createElement('div'), { value: '', image: { compress: false }, ...opts })
+              const forceNormal = mk({ uploader: '/api/upload', chunkUploader: '/api/chunk', upload: { mode: 'normal', chunkThreshold: 0, chunkSize: CS, concurrency: 1, retries: 0 } })
+              check('mode=normal：大文件也走普通上传', forceNormal.uploader.pick(mkFile(CS * 9)) === 'normal', '')
+              const forceChunk = mk({ uploader: '/api/upload', chunkUploader: '/api/chunk', upload: { mode: 'chunk', chunkThreshold: 1e9, chunkSize: CS, concurrency: 1, retries: 0 } })
+              check('mode=chunk：小文件也走分片上传', forceChunk.uploader.pick(mkFile(CS)) === 'chunk', '')
+              const forced = await forceChunk.media.upload(mkFile(CS * 3, 'force.png'), 'image')
+              check('强制分片链路端到端可用', forced?.url === 'https://cdn.example.com/force.png' && forced?.mode === 'chunk', `${forced?.url} / ${forced?.mode}`)
+              const warns = []
+              const realWarn = console.warn
+              console.warn = (...args) => warns.push(args.join(' '))
+              const noChunk = mk({ chunkUploader: null, upload: { mode: 'chunk' } })
+              console.warn = realWarn
+              check(
+                '未配置分片接口时回退普通上传并告警',
+                noChunk.uploaders.chunk === null && noChunk.uploader.pick(mkFile(CS * 9)) === 'normal' && /chunkUploader/.test(warns.join(' ')),
+                warns.join(' ').slice(0, 64),
+              )
+              const noChunk2 = mk({ chunkUploader: null, upload: { mode: 'auto', chunkThreshold: 0 } })
+              check('未配置分片接口时全部走普通上传', noChunk2.uploader.pick(mkFile(CS * 9)) === 'normal', '')
+              for (const ed of [forceNormal, forceChunk, noChunk, noChunk2]) ed.destroy()
+            }
+
+            // H. 只配一条链路时的默认行为（不能让另一条静默留在 mock 上）
+            {
+              const mk = (opts) => KEditor.create(document.createElement('div'), { value: '', image: { compress: false }, ...opts })
+              const onlyNormal = mk({ uploader: '/api/upload' })
+              check('只配普通上传：不启用分片', onlyNormal.uploaders.chunk === null && onlyNormal.uploader.pick(mkFile(CS * 9)) === 'normal', `chunk=${onlyNormal.uploaders.chunk}`)
+              const onlyChunk = mk({ chunkUploader: '/api/chunk' })
+              check('只配分片上传：小文件也走分片（不会落到默认 mock）', onlyChunk.uploader.pick(mkFile(1024)) === 'chunk' && onlyChunk.options.upload.mode === 'chunk', `mode=${onlyChunk.options.upload.mode}`)
+              const both = mk({ uploader: '/api/upload', chunkUploader: '/api/chunk' })
+              check('两条都配：按体积自动选', both.uploader.pick(mkFile(1024)) === 'normal' && both.uploader.pick(mkFile(8 * 1024 * 1024)) === 'chunk', '')
+              const none = mk({})
+              check('都不配：默认两条都是 mock', none.uploaders.chunk !== null && none.uploader.pick(mkFile(8 * 1024 * 1024)) === 'chunk', '')
+              const chunkMock = mk({ uploader: '/api/upload', chunkUploader: 'mock' })
+              check('显式写 mock 时以用户配置为准', chunkMock.uploaders.chunk !== null && chunkMock.uploader.pick(mkFile(8 * 1024 * 1024)) === 'chunk', '')
+              for (const ed of [onlyNormal, onlyChunk, both, none, chunkMock]) ed.destroy()
+            }
+          } finally {
+            window.fetch = realFetch
+          }
+        }
+
+        // 默认配置：uploader / chunkUploader 默认都是 mock，小文件普通、大文件分片
+        {
+          const hostD = document.createElement('div')
+          hostD.style.cssText = 'position:fixed;left:-9999px;top:0;width:820px'
+          document.body.appendChild(hostD)
+          const edD = KEditor.create(hostD, { value: '', image: { compress: false } })
+          check('默认配置：两条链路都已装配', typeof edD.uploaders.normal?.upload === 'function' && typeof edD.uploaders.chunk?.upload === 'function', `chunk=${!!edD.uploaders.chunk}`)
+          check('默认配置：1MB 图片走普通上传', edD.uploader.pick(new File([new Uint8Array(1024 * 1024)], 'a.png')) === 'normal', '阈值 5MB')
+          check('默认配置：8MB 视频走分片上传', edD.uploader.pick(new File([new Uint8Array(8 * 1024 * 1024)], 'a.mp4')) === 'chunk', '阈值 5MB')
+          const r = await edD.media.upload(noiseFile('tiny.png', 'image/png', 200 * 1024), 'image')
+          check('默认配置：小文件上传成功且走普通链路', /^blob:/.test(r?.url || '') && r?.mode === 'normal', `${(r?.url || '').slice(0, 22)}… / ${r?.mode}`)
+          edD.destroy()
+          hostD.remove()
         }
 
         /* ---------------- 自定义工具栏按钮 ---------------- */
@@ -842,7 +1077,7 @@
           check('无 position → 仍追加到主区末尾（尾栏之前）', groupBtns[groupBtns.length - 1]?.dataset.kItem === 'pDefault' && !hostP.querySelector('.ke-tb-tail [data-k-item="pDefault"]'), groupBtns[groupBtns.length - 1]?.dataset.kItem || '空')
           check('显式定位不插多余分隔符', hostP.querySelector('[data-k-item="link"]').nextElementSibling === hostP.querySelector('[data-k-item="pAfter"]'), hostP.querySelector('[data-k-item="link"]').nextElementSibling?.className || '')
           const tailBtns = () => [...edP.toolbar.tailEl.children].filter((n) => n.dataset.kItem).map((n) => n.dataset.kItem)
-          check('tail 按钮排在源码/全屏之后', tailBtns().join(',') === 'source,fullscreen,pTail', tailBtns().join(','))
+          check('tail 按钮排在源码/全屏之后', tailBtns().join(',') === 'markdown,source,fullscreen,pTail', tailBtns().join(','))
           edP.removeButton('pDefault')
           const lastChild = edP.toolbar.groupEl.lastElementChild
           check('removeButton 顺带清掉随行分隔符', !lastChild.classList.contains('ke-tb-sep'), lastChild.className)
@@ -878,7 +1113,7 @@
           const edV = KEditor.create(hostV, { value: '<p>x</p>' })
           await sleep(40)
           check('默认工具栏不再包含预览按钮', !hostV.querySelector('[data-k-item="preview"]') && KEditor.DEFAULT_TOOLBAR.indexOf('preview') < 0, KEditor.DEFAULT_TOOLBAR.join(','))
-          check('默认尾栏只剩源码 / 全屏', [...edV.toolbar.tailEl.children].filter((n) => n.dataset.kItem).map((n) => n.dataset.kItem).join(',') === 'source,fullscreen', '')
+          check('默认尾栏为 markdown/源码/全屏', [...edV.toolbar.tailEl.children].filter((n) => n.dataset.kItem).map((n) => n.dataset.kItem).join(',') === 'markdown,source,fullscreen', '')
           edV.openPreview()
           await sleep(40)
           check('预览 API 仍可用（openPreview / previewMode）', edV.previewMode === true && !!hostV.querySelector('.ke-preview'), '')
@@ -931,6 +1166,61 @@
           check('options.paperMode/paperWidth 初始配置生效', edCus.paperEl.offsetWidth === 864 && !edCus.paperEl.classList.contains('ke-is-fluid'), `w=${edCus.paperEl.offsetWidth}`)
           edCus.destroy()
           hostCus.remove()
+        }
+
+        // D1e. 内容区高度：默认自适应撑开，配了 height 才固定
+        {
+          const LONG = ('<p>' + '自适应高度测试内容。'.repeat(8) + '</p>').repeat(40)
+          const hostAuto = offscreen()
+          const edAuto = KEditor.create(hostAuto, { value: LONG })
+          await sleep(80)
+          const noHiddenScroll = edAuto.scrollEl.scrollHeight <= edAuto.scrollEl.clientHeight + 1
+          check(
+            '不配 height → 自适应：内容区随内容撑开且无内部滚动',
+            edAuto.el.classList.contains('ke-is-auto') && edAuto.paperEl.offsetHeight > 1500 && noHiddenScroll && !edAuto.scrollEl.style.height,
+            `h=${edAuto.el.offsetHeight} paper=${edAuto.paperEl.offsetHeight} inner=${!noHiddenScroll} inline="${edAuto.scrollEl.style.height}"`,
+          )
+          check('自适应模式 overflow:clip（工具栏才能吸附视口顶部）', getComputedStyle(edAuto.el).overflow === 'clip', getComputedStyle(edAuto.el).overflow)
+          const before = edAuto.el.offsetHeight
+          edAuto.commands.insertHTML('<p>追加一段</p>'.repeat(20))
+          await sleep(80)
+          check('内容增加时高度实时跟随', edAuto.el.offsetHeight > before, `${before} → ${edAuto.el.offsetHeight}`)
+          check('heightOptions() 报告当前为自适应', edAuto.heightOptions().auto === true && edAuto.heightOptions().height === 0, JSON.stringify(edAuto.heightOptions()))
+          check('setHeight(500) 运行时固定高度', edAuto.setHeight(500) === 500 && edAuto.scrollEl.style.height === '500px' && !edAuto.el.classList.contains('ke-is-auto'), `h=${edAuto.scrollEl.style.height} cls=${edAuto.el.classList.contains('ke-is-auto')}`)
+          const overflowNow = edAuto.scrollEl.scrollHeight > edAuto.scrollEl.clientHeight + 1
+          check('固定高度后超出内容改为内部滚动', overflowNow && edAuto.heightOptions().auto === false, `inner=${overflowNow}`)
+          check("setHeight('auto') 恢复自适应并清掉内联高度", edAuto.setHeight('auto') === 0 && !edAuto.scrollEl.style.height && edAuto.el.classList.contains('ke-is-auto'), `h="${edAuto.scrollEl.style.height}"`)
+          check('setHeight(0) 同自适应', edAuto.setHeight(0) === 0 && edAuto.heightOptions().auto === true, JSON.stringify(edAuto.heightOptions()))
+          edAuto.destroy()
+          hostAuto.remove()
+
+          const hostFix = offscreen()
+          const edFix = KEditor.create(hostFix, { value: LONG, height: 460 })
+          await sleep(80)
+          check(
+            '配置 height → 固定高度 + 内部滚动',
+            !edFix.el.classList.contains('ke-is-auto') && edFix.scrollEl.style.height === '460px' && edFix.scrollEl.scrollHeight > edFix.scrollEl.clientHeight + 1,
+            `h=${edFix.scrollEl.style.height} cls=${edFix.el.classList.contains('ke-is-auto')}`,
+          )
+          edFix.destroy()
+          hostFix.remove()
+
+          const hostStr = offscreen()
+          const edStr = KEditor.create(hostStr, { value: '<p>x</p>', height: 'auto' })
+          const hostZero = offscreen()
+          const edZero = KEditor.create(hostZero, { value: '<p>x</p>', height: 0 })
+          await sleep(60)
+          check("height:'auto' / 0 均视为自适应", edStr.el.classList.contains('ke-is-auto') && edZero.el.classList.contains('ke-is-auto'), '')
+          const hostNeg = offscreen()
+          const edNeg = KEditor.create(hostNeg, { value: '<p>x</p>', height: -1 })
+          await sleep(60)
+          check('非法 height（负数）退化为自适应而非伸展异常', edNeg.el.classList.contains('ke-is-auto') && !edNeg.scrollEl.style.height, `h="${edNeg.scrollEl.style.height}"`)
+          const hostMin = offscreen()
+          const edMin = KEditor.create(hostMin, { value: '', minHeight: 500 })
+          await sleep(60)
+          check('minHeight 在自适应模式下仍生效', edMin.paperEl.offsetHeight >= 500, `paper=${edMin.paperEl.offsetHeight}`)
+          for (const ed of [edStr, edZero, edNeg, edMin]) ed.destroy()
+          for (const host of [hostStr, hostZero, hostNeg, hostMin]) host.remove()
         }
 
         // D2. 窄屏下新增按钮应自动滚进可视区（不被 sticky 尾栏遮住）
@@ -997,6 +1287,342 @@
         }
 
         check('自定义按钮流程无新增运行时错误', jsErrors.length === errorsBefore, jsErrors.slice(errorsBefore).join(' | ').slice(0, 200))
+
+        // F. 代码块：语言选择 + 语法高亮
+        {
+          const errorsBeforeCode = jsErrors.length
+          const langList = KEditor.listLanguages()
+          check('内置语言清单可用（20 种）', langList.length === 20 && langList.every((l) => l.value && l.label && l.hint), `n=${langList.length}`)
+          check('别名归一：js→javascript / mysql→sql / 大小写不敏感', KEditor.normalizeLang('JS') === 'javascript' && KEditor.normalizeLang('mysql') === 'sql' && KEditor.normalizeLang('PYTHON') === 'python', KEditor.normalizeLang('mysql'))
+          check('未知语言退化为 plaintext', KEditor.normalizeLang('brainfuck') === 'plaintext' && KEditor.normalizeLang('') === 'plaintext', KEditor.normalizeLang('brainfuck'))
+          check('languageLabel 展示名', KEditor.languageLabel('js') === 'JavaScript' && KEditor.languageLabel('unknown') === '纯文本', KEditor.languageLabel('unknown'))
+          const hiJs = KEditor.highlightCode('const a = "<b>" // x', 'javascript')
+          check('highlightCode：关键字/字符串/注释分词', /ke-tok-kw">const</.test(hiJs) && /ke-tok-str/.test(hiJs) && /ke-tok-com/.test(hiJs), hiJs.slice(0, 100))
+          check('highlightCode：HTML 被转义（不能注入）', !/<b>/.test(hiJs) && /&lt;b&gt;/.test(hiJs), hiJs.match(/ke-tok-str[^<]*<[^>]*>[^<]*/)?.[0] || hiJs.slice(0, 80))
+          check('highlightCode：未知/空语言按纯文本转义', !/ke-tok-/.test(KEditor.highlightCode('a < b', 'nope')), KEditor.highlightCode('a < b', 'nope'))
+          check('highlightCode：超长文本退化为纯文本（不卡死）', KEditor.highlightCode('a = 1\n'.repeat(20000), 'python').length > 100000, '')
+
+          const hostK = offscreen()
+          const edK = KEditor.create(hostK, { value: '<p>开头</p>' })
+          await sleep(30)
+          const kBtn = hostK.querySelector('.ke-tb [data-k-item="code"]')
+          const kPop = () => hostK.querySelector('.ke-pop')
+          const kRow = (lang) => hostK.querySelector(`.ke-pop [data-k-lang="${lang}"]`)
+          const kCode = () => edK.root.querySelector('pre code')
+          const caretAt = (el) => {
+            const sel = window.getSelection()
+            if (!sel.rangeCount || !el.contains(sel.anchorNode)) return -1
+            const probe = document.createRange()
+            probe.selectNodeContents(el)
+            probe.setEnd(sel.anchorNode, sel.anchorOffset)
+            return probe.toString().length
+          }
+
+          check('代码块工具栏按钮存在', !!kBtn, '')
+          kBtn.click()
+          await sleep(60)
+          check('点击按钮打开语言面板', !!kPop() && !kPop().hidden && /插入代码块/.test(kPop().querySelector('.ke-panel-title')?.textContent || ''), kPop()?.querySelector('.ke-panel-title')?.textContent || '未打开')
+          check('面板列出全部语言', kPop().querySelectorAll('.ke-sel-row').length === 20, String(kPop().querySelectorAll('.ke-sel-row').length))
+          check('面板头部显示语言数量', /20 种语言/.test(kPop().querySelector('.ke-panel-note')?.textContent || ''), kPop().querySelector('.ke-panel-note')?.textContent || '')
+          const kSearch = kPop().querySelector('.ke-sel-search')
+          check('搜索框自动聚焦（可直接输入）', document.activeElement === kSearch, document.activeElement?.className || '')
+          kSearch.value = 'py'
+          kSearch.dispatchEvent(new Event('input'))
+          check('搜索按 value/label/hint 过滤', [...kPop().querySelectorAll('.ke-sel-row')].every((r) => r.dataset.kLang === 'python') && kPop().querySelectorAll('.ke-sel-row').length === 1, [...kPop().querySelectorAll('.ke-sel-row')].map((r) => r.dataset.kLang).join(','))
+          check('过滤后头部显示命中数', /1 \/ 20 种/.test(kPop().querySelector('.ke-panel-note')?.textContent || ''), kPop().querySelector('.ke-panel-note')?.textContent || '')
+          kSearch.value = ''
+          kSearch.dispatchEvent(new Event('input'))
+
+          kRow('javascript').click()
+          await sleep(60)
+          const kPre = edK.root.querySelector('pre')
+          check('选择语言后插入代码块并写入语言标记', kPre?.getAttribute('data-k-lang') === 'javascript' && kCode()?.className === 'language-javascript', `${kPre?.getAttribute('data-k-lang')} / ${kCode()?.className}`)
+          check('插入后占位代码已高亮', kCode().querySelectorAll('span[class*="ke-tok-"]').length > 0, String(kCode().querySelectorAll('span[class*="ke-tok-"]').length))
+          check('插入后光标在代码块内容末尾', caretAt(kCode()) === kCode().textContent.length, `caret=${caretAt(kCode())} len=${kCode().textContent.length}`)
+          check('面板选完自动关闭', kPop().hidden === true, String(kPop().hidden))
+          check('记住上次语言', edK.lastCodeLang === 'javascript', edK.lastCodeLang)
+          check('KEditor.isCodeBlock 识别代码块', KEditor.isCodeBlock(kPre) === true && KEditor.isCodeBlock(edK.root.querySelector('p')) === false, '')
+
+          edK.setContent('<pre data-k-lang="javascript"><code>const a = 1\nif (a) {\n  a += 1\n}</code></pre>')
+          await sleep(40)
+          const tokensBeforeTyping = kCode().querySelectorAll('span[class*="ke-tok-"]').length
+          const caretEnd = kCode().textContent.length
+          const kRange = document.createRange()
+          kRange.selectNodeContents(kCode())
+          kRange.collapse(false)
+          const kSel = window.getSelection()
+          kSel.removeAllRanges()
+          kSel.addRange(kRange)
+          edK.root.focus()
+          const insertAtCaret = (text) => {
+            const sel = window.getSelection()
+            const range = sel.getRangeAt(0)
+            range.deleteContents()
+            const node = document.createTextNode(text)
+            range.insertNode(node)
+            range.setStartAfter(node)
+            range.collapse(true)
+            sel.removeAllRanges()
+            sel.addRange(range)
+          }
+          insertAtCaret('\n// 尾注')
+          edK.root.dispatchEvent(new Event('input', { bubbles: true }))
+          await sleep(220)
+          check('块内打字后自动重新高亮', kCode().querySelectorAll('span[class*="ke-tok-"]').length > tokensBeforeTyping, `${tokensBeforeTyping} → ${kCode().querySelectorAll('span[class*="ke-tok-"]').length}`)
+          check('新输入的注释被识别为注释', [...kCode().querySelectorAll('.ke-tok-com')].some((n) => /尾注/.test(n.textContent)), '')
+          check('重新高亮后块内光标位置保持', caretAt(kCode()) === caretEnd + '\n// 尾注'.length, `caret=${caretAt(kCode())} want=${caretEnd + 6}`)
+          check('换行未被高亮破坏（行数正确）', kCode().textContent.split('\n').length === 5 && !kCode().querySelector('br') && !kCode().querySelector('div'), JSON.stringify(kCode().textContent))
+
+          edK.setContent('<pre data-k-lang="javascript"><code>a = 1<br>b = 2</code></pre>')
+          await sleep(40)
+          check('重高亮把 <br> 还原成换行（真实回车产生的换行不会丢）', kCode().textContent === 'a = 1\nb = 2' && !kCode().querySelector('br'), JSON.stringify(kCode().textContent))
+          edK.setContent('<pre data-k-lang="javascript"><code>const a = 1\nif (a) {\n  a += 1\n}</code></pre>')
+          await sleep(40)
+          const srcBefore = kCode().textContent
+          const exported = edK.getHTML()
+          check('导出剥离高亮 span（正文保持干净）', !/ke-tok-/.test(exported) && /<pre data-k-lang="javascript">/.test(exported), exported.slice(0, 90))
+          check('导出保留代码文本与换行', exported.includes(srcBefore), JSON.stringify(srcBefore))
+
+          edK.openPreview()
+          await sleep(60)
+          check('预览面板保留语法高亮', !!hostK.querySelector('.ke-preview .ke-tok-kw'), hostK.querySelector('.ke-preview .ke-tok-kw')?.textContent || '无 token')
+          check('预览里仍带语言角标标记', hostK.querySelector('.ke-preview pre[data-k-lang="javascript"]') !== null, '')
+          edK.closePreview()
+          check('预览不影响导出干净度', !/ke-tok-/.test(edK.getHTML()), '')
+
+          edK.toggleSource()
+          await sleep(40)
+          check('源码模式展示未高亮的 HTML', /<pre data-k-lang="javascript"><code>[^<]/.test(edK.source.value), edK.source.value.slice(0, 80))
+          edK.source.format()
+          await sleep(40)
+          edK.exitSource()
+          await sleep(60)
+          check('源码往返后语言与文本不变', edK.root.querySelector('pre')?.getAttribute('data-k-lang') === 'javascript' && kCode().textContent === srcBefore, JSON.stringify(kCode().textContent.slice(0, 40)))
+          check('往返后重新高亮', kCode().querySelectorAll('span[class*="ke-tok-"]').length > 0, String(kCode().querySelectorAll('span[class*="ke-tok-"]').length))
+
+          // 光标进入代码块 → 按钮高亮 + 面板切换为“代码块语言”
+          const inRange = document.createRange()
+          inRange.selectNodeContents(kCode())
+          inRange.collapse(false)
+          kSel.removeAllRanges()
+          kSel.addRange(inRange)
+          edK.root.dispatchEvent(new Event('input', { bubbles: true }))
+          edK.refresh()
+          await sleep(60)
+          check('光标在代码块内时按钮高亮', edK.getState().inCode === true && kBtn.classList.contains('ke-is-active'), `inCode=${edK.getState().inCode}`)
+          check('getCodeLanguage 返回当前块语言', edK.getCodeLanguage() === 'javascript', edK.getCodeLanguage())
+          kBtn.click()
+          await sleep(60)
+          check('块内打开面板为“代码块语言”并标出当前语言', /代码块语言/.test(kPop().querySelector('.ke-panel-title')?.textContent || '') && kPop().querySelector('.ke-sel-row.ke-is-active')?.dataset.kLang === 'javascript', kPop().querySelector('.ke-panel-title')?.textContent || '')
+          kRow('python').click()
+          await sleep(60)
+          const beforeCount = edK.root.querySelectorAll('pre').length
+          check('切语言不新增代码块（改写当前块）', edK.root.querySelectorAll('pre').length === beforeCount, String(beforeCount))
+          check('切语言同步 data-k-lang 与 class', edK.root.querySelector('pre').getAttribute('data-k-lang') === 'python' && kCode().className === 'language-python', `${edK.root.querySelector('pre').getAttribute('data-k-lang')} / ${kCode().className}`)
+          check('切语言按新语言重新高亮', kCode().querySelectorAll('span[class*="ke-tok-"]').length > 0, String(kCode().querySelectorAll('span[class*="ke-tok-"]').length))
+          check('切语言后光标仍在代码块内', caretAt(kCode()) >= 0, String(caretAt(kCode())))
+          check('setCodeLanguage 返回生效语言 / 不在块内返回 null', edK.setCodeLanguage('go') === 'go' && edK.getCodeLanguage() === 'go', `${edK.setCodeLanguage('go')} / ${edK.getCodeLanguage()}`)
+
+          // 粘贴/外部 HTML 导入的代码块：认标准 language-x class 并高亮
+          edK.setContent('<h2>t</h2>')
+          const pasteRange = document.createRange()
+          pasteRange.selectNodeContents(edK.root)
+          pasteRange.collapse(false)
+          window.getSelection().removeAllRanges()
+          window.getSelection().addRange(pasteRange)
+          edK.commands.insertHTML('<pre><code class="language-sql">select 1 from t</code></pre>')
+          await sleep(40)
+          const pastedPre = edK.root.querySelector('pre')
+          check('外部 HTML 的 language-x class 被识别', pastedPre?.getAttribute('data-k-lang') === 'sql', pastedPre?.getAttribute('data-k-lang') || '无')
+          check('粘贴进来的代码块也被高亮', pastedPre.querySelectorAll('span[class*="ke-tok-"]').length > 0, String(pastedPre.querySelectorAll('span[class*="ke-tok-"]').length))
+          const xssCode = edK.setContent('<pre><code class="language-html">&lt;img src=x onerror=alert(1)&gt;</code></pre>').getHTML()
+          check('XSS：代码块内标签按文本转义（不会变成真元素）', !/<img/i.test(xssCode) && /&lt;img/.test(xssCode), xssCode.slice(0, 90))
+
+          check('代码块流程无新增运行时错误', jsErrors.length === errorsBeforeCode, jsErrors.slice(errorsBeforeCode).join(' | ').slice(0, 200))
+          edK.destroy()
+          hostK.remove()
+        }
+
+        // G. 代码块选项：裁剪语言 / 默认语言 / 关闭高亮
+        {
+          const hostL = offscreen()
+          const edL = KEditor.create(hostL, { code: { languages: ['js', 'python'], defaultLanguage: 'python' } })
+          await sleep(20)
+          check('code.languages 裁剪清单（别名也认）', edL.codeLanguages().map((l) => l.value).join(',') === 'javascript,python', edL.codeLanguages().map((l) => l.value).join(','))
+          check('defaultLanguage 生效', edL.lastCodeLang === 'python', edL.lastCodeLang)
+          edL.insertCode('x = 1')
+          check('insertCode 用默认语言建块', edL.root.querySelector('pre').getAttribute('data-k-lang') === 'python' && edL.root.querySelector('pre').querySelectorAll('span[class*="ke-tok-"]').length > 0, edL.getHTML().slice(0, 70))
+          check('insertCode 支持显式语言（含别名）', edL.insertCode('const a = 1', 'js').getAttribute('data-k-lang') === 'javascript', '')
+          check('highlightCode() 可手动重跑并返回块数', edL.highlightCode() === 2, String(edL.highlightCode()))
+          edL.destroy()
+          hostL.remove()
+
+          const hostM = offscreen()
+          const edM = KEditor.create(hostM, { code: { languages: ['js', 'python'], defaultLanguage: 'rust' }, value: '<pre><code class="language-go">func f() {}</code></pre>' })
+          await sleep(20)
+          check('defaultLanguage 不在清单内 → 落到第一项', edM.lastCodeLang === 'javascript', edM.lastCodeLang)
+          check('已存在代码块保留自身语言（不受 defaultLanguage 影响）', edM.root.querySelector('pre').getAttribute('data-k-lang') === 'go', edM.root.querySelector('pre').getAttribute('data-k-lang'))
+          edM.destroy()
+          hostM.remove()
+
+          const hostN = offscreen()
+          const edN = KEditor.create(hostN, { value: '<pre data-k-lang="go"><code>func f() {}</code></pre>', code: { highlight: false } })
+          await sleep(20)
+          check('code.highlight:false → 不产生 token span', edN.root.querySelectorAll('span[class*="ke-tok-"]').length === 0, '')
+          check('code.highlight:false → 仍保留语言标记与文本', edN.root.querySelector('pre').getAttribute('data-k-lang') === 'go' && /func f/.test(edN.root.querySelector('pre code').textContent), '')
+          check('code.highlight:false → 导出仍是纯文本', !/ke-tok-/.test(edN.getHTML()), '')
+
+          const hostP = offscreen()
+          const edP = KEditor.create(hostP, { code: { languages: [] } })
+          check('语言清单为空数组时回落到全量', edP.codeLanguages().length === 20, String(edP.codeLanguages().length))
+          edP.destroy()
+          hostP.remove()
+          edN.destroy()
+          hostN.remove()
+        }
+
+
+        // H. Markdown 导入：文件 / 文本 → HTML
+        {
+          const errorsBeforeMd = jsErrors.length
+          const md = (lines) => lines.join('\n')
+          const fence = '```'
+
+          check('Markdown 工具导出齐全', ['markdownToHtml', 'markdownSummary', 'isMarkdownFile', 'readMarkdownFile', 'normalizeInsertMode'].every((k) => typeof KEditor[k] === 'function') && typeof KEditor.MARKDOWN_ACCEPT === 'string', '')
+          const mdHtml = KEditor.markdownToHtml(md(['# 一级标题', '', '正文带 **粗体**、*斜体* 与 [链接](https://x.com)。', '', '## 二级', '', fence + 'js', 'const a = 1', fence, '', '- 项一', '- 项二', '  - 嵌套', '', '| 参数 | 说明 |', '| :-: | --- |', '| a | 甲 |', '', '> 引用', '', '1. 有序', '', '---', '', '更多见 https://y.com/x 与 ![图](https://y.com/a.png)']))
+          check('标题/段落/行内语法转换', /<h1>一级标题<\/h1>/.test(mdHtml) && /<strong>粗体<\/strong>/.test(mdHtml) && /<em>斜体<\/em>/.test(mdHtml) && /<a href="https:\/\/x.com">链接<\/a>/.test(mdHtml), mdHtml.slice(0, 60))
+          check('代码块带上语言标记', /<pre data-k-lang="javascript"><code class="language-javascript">const a = 1<\/code><\/pre>/.test(mdHtml), mdHtml.match(/<pre[^>]*>/)?.[0])
+          check('列表（含嵌套）/ 表格 / 引用 / 有序 / 分隔线齐全', /<ul>/.test(mdHtml) && /<table>/.test(mdHtml) && /<blockquote>/.test(mdHtml) && /<ol>/.test(mdHtml) && /<hr>/.test(mdHtml) && /<th style="text-align:center">参数<\/th>/.test(mdHtml), '')
+          check('裸链接与图片自动识别', /<a href="https:\/\/y.com\/x">/.test(mdHtml) && /<img src="https:\/\/y.com\/a.png"/.test(mdHtml), '')
+          check('front matter 被丢弃', KEditor.markdownToHtml(md(['---', 'title: x', '---', '# 标题'])) === '<h1>标题</h1>', KEditor.markdownToHtml(md(['---', 'title: x', '---', '# 标题'])))
+          check('markdownSummary 统计块级元素', (() => { const s = KEditor.markdownSummary(mdHtml); return s.headings === 2 && s.lists === 3 && s.items === 4 && s.codeBlocks === 1 && s.tables === 1 && s.quotes === 1 && s.images === 1 })(), JSON.stringify(KEditor.markdownSummary(mdHtml)))
+          check('gfm:false 关闭表格/删除线/裸链接', !/<table/.test(KEditor.markdownToHtml(md(['| a |', '| --- |', '| 1 |']), { gfm: false })) && KEditor.markdownToHtml('~~x~~', { gfm: false }) === '<p>~~x~~</p>' && KEditor.markdownToHtml('见 https://x.com', { gfm: false }) === '<p>见 https://x.com</p>', '')
+
+          const injected = KEditor.markdownToHtml(md(['正文', '', '<scr' + 'ipt>alert(1)</scr' + 'ipt>', '', '<img src=x onerror' + '=alert(1)>', '', '[a](javascript:alert(1))']))
+          check('XSS：脚本/事件属性/危险协议全清掉', !/<script/i.test(injected) && !/onerror/i.test(injected) && !/javascript:/i.test(injected) && /&lt;script&gt;/.test(injected), injected.slice(0, 90))
+          check('未授权行内标签按文本转义', /<p>&lt;blink&gt;x&lt;\/blink&gt;<\/p>/.test(KEditor.markdownToHtml('<blink>x</blink>')), KEditor.markdownToHtml('<blink>x</blink>'))
+          check('未知语言退化纯文本（不丢内容）', KEditor.markdownToHtml(md([fence + 'brainfuck', '+++.', fence])) === '<pre><code>+++.</code></pre>', KEditor.markdownToHtml(md([fence + 'brainfuck', '+++.', fence])))
+          check('空输入不报错', KEditor.markdownToHtml('') === '' && KEditor.markdownSummary('').headings === 0, '')
+          check('isMarkdownFile 判定（含 .txt / 排除图片）', KEditor.isMarkdownFile({ name: 'a.md', type: '' }) && KEditor.isMarkdownFile({ name: 'a.txt', type: 'text/plain' }) && !KEditor.isMarkdownFile({ name: 'a.md', type: 'image/png' }) && !KEditor.isMarkdownFile(null), '')
+          check('normalizeInsertMode 归一', KEditor.normalizeInsertMode('append') === 'append' && KEditor.normalizeInsertMode('cursor') === 'cursor' && KEditor.normalizeInsertMode('nope') === 'replace', '')
+
+          const hostMd = offscreen()
+          const edMd = KEditor.create(hostMd, { value: '<p>原有内容</p>' })
+          await sleep(30)
+          const mdBtn = hostMd.querySelector('.ke-tb [data-k-item="markdown"]')
+          const mdPop = () => hostMd.querySelector('.ke-pop')
+          check('工具栏有导入按钮且位于尾部区', !!mdBtn && mdBtn.closest('.ke-tb-tail') !== null, mdBtn ? mdBtn.parentElement.className : 'null')
+          // 回归：按钮曾只显图标且图标是「外框 M + 箭头」，17px 下糊成一团、看不出功能
+          const mdIco = mdBtn.querySelector('svg.ke-ico')
+          const icoD = mdIco?.querySelector('path')?.getAttribute('d') || ''
+          check('导入按钮文案为「导入MD」', mdBtn.querySelector('.ke-btn-text')?.textContent === '导入MD', mdBtn.textContent.trim())
+          check('图标是托盘+下箭头（不再用挤作一团的外框 M）', !!mdIco && !mdIco.querySelector('rect') && icoD.indexOf('M12 3.8v') === 0, icoD.slice(0, 24))
+          check('按钮提示说明用途', /导入 Markdown/.test(mdBtn.title), mdBtn.title)
+          mdBtn.click()
+          await sleep(60)
+          check('打开导入面板（含页签/模式/预览）', /导入 Markdown/.test(mdPop()?.querySelector('.ke-panel-title')?.textContent || '') && mdPop().querySelectorAll('.ke-tab').length === 2 && mdPop().querySelectorAll('.ke-md-mode').length === 3 && !!mdPop().querySelector('.ke-md-preview'), '')
+          check('默认落点为替换全文', mdPop().querySelector('.ke-md-mode.ke-is-active')?.textContent === '替换全文', mdPop().querySelector('.ke-md-mode.ke-is-active')?.textContent)
+          check('空态禁用导入并给出提示', mdPop().querySelector('.ke-btn-primary').disabled === true && /会显示转换预览/.test(mdPop().querySelector('.ke-md-preview').textContent), '')
+          mdPop().querySelectorAll('.ke-tab')[1].click()
+          const mdText = mdPop().querySelector('.ke-md-text')
+          mdText.value = md(['# 面板导入', '', '正文'])
+          mdText.dispatchEvent(new Event('input'))
+          await sleep(280)
+          check('粘贴文本后实时预览', !!mdPop().querySelector('.ke-md-preview h1') && mdPop().querySelector('.ke-panel-note').textContent.includes('字符'), mdPop().querySelector('.ke-panel-note').textContent)
+          // 回归：面板曾被预览里的宽表格 / 长链接撑宽，且变高后底部按钮被挤出可视区
+          const mdPanel = () => mdPop().querySelector('.ke-md-panel')
+          const panelWidth = () => Math.round(mdPanel().getBoundingClientRect().width)
+          const widthBefore = panelWidth()
+          mdText.value = md([
+            '# 面板导入', '', '正文', '',
+            '| 很宽的列一 | 很宽的列二 | 很宽的列三 | 很宽的列四 | 很宽的列五 | 很宽的列六 |',
+            '| --- | :--: | ---: | --- | --- | --- |',
+            '| a | b | c | d | e | f |', '',
+            `见 https://example.com/${'segment/'.repeat(12)}end`,
+            '', fence + 'js', 'const padding = ' + 1, fence,
+          ])
+          mdText.dispatchEvent(new Event('input'))
+          await sleep(300)
+          check('面板宽度固定：宽表格 / 长链接不会把弹层撑宽', panelWidth() === widthBefore && panelWidth() <= 372, `${widthBefore} → ${panelWidth()}`)
+          check('预览被约束在面板内（不反向撑开面板）', (() => {
+            const pw = mdPanel().getBoundingClientRect().width
+            return mdPanel().querySelector('.ke-md-preview').getBoundingClientRect().width <= pw
+          })(), '')
+          check('面板高度有上限且底部按钮钉在面板内', (() => {
+            const panel = mdPanel()
+            const pb = panel.getBoundingClientRect()
+            const foot = panel.querySelector('.ke-panel-foot').getBoundingClientRect()
+            const cap = parseFloat(getComputedStyle(panel).maxHeight) + 1
+            const body = panel.querySelector('.ke-md-body')
+            return Math.round(pb.height) <= cap && foot.bottom <= pb.bottom + 1 && foot.top >= pb.top && !!body
+          })(), `h=${Math.round(mdPanel().getBoundingClientRect().height)} cap=${getComputedStyle(mdPanel()).maxHeight}`)
+          mdText.value = md(['# 面板导入', '', '正文'])
+          mdText.dispatchEvent(new Event('input'))
+          await sleep(60)
+          mdPop().querySelectorAll('.ke-md-mode')[1].click()
+          check('可改落点为追加文末', mdPop().querySelector('.ke-md-mode.ke-is-active')?.textContent === '追加文末', '')
+          mdPop().querySelector('.ke-btn-primary').click()
+          await sleep(120)
+          check('导入后关闭面板', !mdPop().offsetParent, '')
+          check('追加模式：原内容保留 + 新内容到位', /原有内容/.test(edMd.getHTML()) && /面板导入/.test(edMd.getHTML()), edMd.getHTML().slice(0, 50))
+
+          const mdFile = new File([md(['# 文件导入', '', fence + 'python', 'def f():', '    return 1', fence])], 'readme.md', { type: 'text/markdown' })
+          const fileRes = await edMd.importMarkdown(mdFile)
+          check('importMarkdown(File) 默认替换全文并报文件名', fileRes.ok === true && fileRes.mode === 'replace' && fileRes.name === 'readme.md' && !/面板导入/.test(edMd.getHTML()), JSON.stringify({ ok: fileRes.ok, mode: fileRes.mode, name: fileRes.name }))
+          check('文件导入的代码块已高亮', edMd.root.querySelectorAll('pre span[class*="ke-tok-"]').length > 0 && edMd.root.querySelector('pre').getAttribute('data-k-lang') === 'python', edMd.root.querySelector('pre')?.getAttribute('data-k-lang'))
+          check('返回结构含 summary/chars', fileRes.summary?.headings === 1 && fileRes.chars > 0, JSON.stringify(fileRes.summary))
+          check('导出产物无高亮 token、保留语言标记', !/ke-tok-/.test(edMd.getHTML()) && /<pre data-k-lang="python"><code class="language-python">/.test(edMd.getHTML()), edMd.getHTML().slice(0, 70))
+          check('导出产物不含内部属性', !/data-k-id|contenteditable/.test(edMd.getHTML()), '')
+
+          edMd.setContent('<p>甲乙丙</p>')
+          const insRes = await edMd.insertMarkdown('## 光标处标题')
+          check('insertMarkdown 插入光标处且保留原内容', insRes.mode === 'cursor' && /甲乙丙/.test(edMd.getHTML()) && /光标处标题/.test(edMd.getHTML()), edMd.getHTML().slice(0, 60))
+          const appRes = await edMd.appendMarkdown(md(['- 末尾列表', '- 第二项']))
+          check('appendMarkdown 追加到文末', appRes.mode === 'append' && /末尾列表/.test(edMd.getHTML()), edMd.getHTML().slice(-50))
+          const setRes = await edMd.setMarkdown('只留这一段')
+          check('setMarkdown 替换全文', setRes.ok && edMd.getHTML() === '<p>只留这一段</p>', edMd.getHTML())
+          check('markdownOptions() 反映配置', edMd.markdownOptions().insertMode === 'replace', JSON.stringify(edMd.markdownOptions()))
+          const beforeEmpty = edMd.getHTML()
+          const emptyRes = await edMd.importMarkdown('   ')
+          check('空内容导入失败且不改动正文', emptyRes.ok === false && edMd.getHTML() === beforeEmpty, JSON.stringify({ ok: emptyRes.ok, reason: emptyRes.reason }))
+
+          const hostMd2 = offscreen()
+          const edMd2 = KEditor.create(hostMd2, { value: '<p>底稿</p>', markdown: { insertMode: 'append' } })
+          await sleep(30)
+          check('markdown.insertMode 选项影响默认落点', edMd2.markdownOptions().insertMode === 'append', edMd2.markdownOptions().insertMode)
+          await edMd2.importMarkdown('# 追加标题')
+          check('默认落点=追加时不覆盖正文', /底稿/.test(edMd2.getHTML()) && /追加标题/.test(edMd2.getHTML()), edMd2.getHTML().slice(0, 50))
+          edMd2.destroy()
+          hostMd2.remove()
+
+          const hostMd3 = offscreen()
+          const edMd3 = KEditor.create(hostMd3, { markdown: { maxSize: 16 } })
+          await sleep(30)
+          const bigRes = await edMd3.importMarkdown(new File(['x'.repeat(120)], 'big.md', { type: 'text/markdown' }))
+          check('超出 markdown.maxSize 被拒绝', bigRes.ok === false && /超出大小限制/.test(document.body.textContent), String(bigRes.ok))
+          edMd3.destroy()
+          hostMd3.remove()
+
+          const hostMd4 = offscreen()
+          const edMd4 = KEditor.create(hostMd4, { code: { highlight: false } })
+          await sleep(30)
+          await edMd4.importMarkdown(md([fence + 'js', 'const a = 1', fence]))
+          check('code.highlight:false 时导入不高亮但保留语言标记', edMd4.root.querySelectorAll('pre span[class*="ke-tok-"]').length === 0 && edMd4.root.querySelector('pre').getAttribute('data-k-lang') === 'javascript', '')
+          edMd4.destroy()
+          hostMd4.remove()
+
+          const hostMd5 = offscreen()
+          const edMd5 = KEditor.create(hostMd5, { readOnly: true })
+          await sleep(30)
+          const roRes = await edMd5.importMarkdown('# 只读')
+          check('只读模式拒绝导入', roRes.ok === false && roRes.reason === 'readonly', JSON.stringify(roRes))
+          edMd5.destroy()
+          hostMd5.remove()
+
+          edMd.destroy()
+          hostMd.remove()
+          check('Markdown 流程无新增运行时错误', jsErrors.length === errorsBeforeMd, jsErrors.slice(errorsBeforeMd).join(' | ').slice(0, 200))
+        }
 
         editor.destroy()
         check('销毁后清空容器', document.getElementById('editor').innerHTML === '' && !document.getElementById('editor').classList.contains('ke'), '')

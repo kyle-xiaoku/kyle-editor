@@ -33,6 +33,11 @@ export function formatHtml(html, { indent = '  ' } = {}) {
         return
       }
       const hasBlockChild = [...child.querySelectorAll('*')].some((node) => BLOCK_TAGS.has(node.tagName.toLowerCase()))
+      // 代码块逐字保留：collapse() 会把缩进与空行压成空格，直接把代码改坏
+      if (tag === 'pre') {
+        lines.push({ depth, text: indent.repeat(depth) + child.outerHTML.trim(), inlineRun: false })
+        return
+      }
       // 表格行/图片块/视频卡即使含子元素也保持单行，可读性更好
       const keepOneLine = tag === 'tr' || tag === 'figure' || tag === 'video'
       if (!hasBlockChild || keepOneLine) {
@@ -49,7 +54,8 @@ export function formatHtml(html, { indent = '  ' } = {}) {
   }
 
   walk(root, 0)
-  return lines.map((line) => line.text).join('\n').replace(/\n{3,}/g, '\n\n')
+  // 不再统一压空行：pre 的换行必须原样保留（lines 内部不会出现空行）
+  return lines.map((line) => line.text).join('\n')
 }
 
 /** 压缩多余空白（不改动文本内容中的单个空格） */

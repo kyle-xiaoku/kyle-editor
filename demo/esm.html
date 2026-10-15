@@ -49,7 +49,7 @@
         while (log.childElementCount > 30) log.lastElementChild.remove()
       }
 
-      // 完全自定义 adapter：只实现 init / put / complete
+      // 完全自定义 adapter：实现 put() 即可（init / complete 可选）
       const chunks = new Map()
       const customAdapter = {
         async init(meta) {
@@ -76,8 +76,8 @@
 
       const editor = create('#editor', {
         value: '<p>这里演示 <strong>自定义上传适配器</strong>：每次分片调用都会打印在右侧。</p>',
-        uploader: customAdapter,
-        upload: { chunkSize: 128 * 1024, concurrency: 4 },
+        chunkUploader: customAdapter, // 分片上传链路
+        upload: { mode: 'chunk', chunkSize: 128 * 1024, concurrency: 4 },
         onChange: (html) => {
           out.textContent = html
         },

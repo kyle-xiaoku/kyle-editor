@@ -10,3 +10,4 @@ uploads/
 .npmrc
 !.npmrc.example
 .npmrc.*
+website/

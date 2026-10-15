@@ -1,7 +1,9 @@
 /** 工具栏：声明式配置，可整体替换或裁剪（options.toolbar），支持自定义下拉按钮（options.customButtons） */
-import { h } from '../core/utils.js'
+import { h, formatSize } from '../core/utils.js'
 import { icon } from '../core/icons.js'
-import { colorPanel, headingPanel, fontSizePanel, tablePanel, linkPanel, mediaPanel, selectPanel, normalizeUrl } from '../ui/popover.js'
+import { colorPanel, headingPanel, fontSizePanel, tablePanel, linkPanel, mediaPanel, selectPanel, codePanel, markdownPanel, normalizeUrl } from '../ui/popover.js'
+import { codeBlockAt, languageOf } from './code.js'
+import { markdownToHtml, markdownSummary, MARKDOWN_ACCEPT, normalizeInsertMode } from './markdown.js'
 import {
   normalizeCustomButton,
   normalizePosition,
@@ -36,7 +38,7 @@ export const DEFAULT_TOOLBAR = [
   'alignLeft', 'alignCenter', 'alignRight', 'alignJustify', '|',
   'ul', 'ol', 'quote', '|',
   'link', 'image', 'video', 'table', 'code', 'hr', 'clear',
-  ':tail', 'source', 'fullscreen',
+  ':tail', 'markdown', 'source', 'fullscreen',
 ]
 
 const ITEMS = {
@@ -57,7 +59,8 @@ const ITEMS = {
   image: { icon: 'image', title: '图片（本地上传 / 网络链接）', run: (e) => e.toolbar.openMedia('image'), toggles: true },
   video: { icon: 'video', title: '视频（本地上传 / 网络链接，支持分片上传）', run: (e) => e.toolbar.openMedia('video'), toggles: true },
   table: { icon: 'table', title: '插入表格', run: (e) => e.toolbar.openTable(), toggles: true },
-  code: { icon: 'code', title: '代码块', run: (e) => e.commands.insertCodeBlock() },
+  code: { icon: 'code', title: '代码块（选择语言并语法高亮）', run: (e) => e.toolbar.openCode(), active: (s) => s.inCode, toggles: true },
+  markdown: { icon: 'markdown', text: '导入MD', title: '导入 Markdown 文件 / 粘贴 Markdown 文本，转为 HTML 显示（.md / .txt）', run: (e) => e.toolbar.openMarkdown(), toggles: true },
   hr: { icon: 'hr', title: '分割线', run: (e) => e.commands.insertDivider() },
   clear: { icon: 'clear', title: '清除格式', run: (e) => e.commands.clearFormat() },
   source: { icon: 'source', title: '查看 / 编辑 HTML 源码（⌘/Ctrl+Shift+K）', text: '源码', run: (e) => e.toggleSource(), active: (s) => s.source },
@@ -492,6 +495,55 @@ export class Toolbar {
     }
     this.editor.commands.setColor(kind, color)
     this.editor.popover.close()
+  }
+
+  /**
+   * 代码块：光标不在代码块里 = 选语言后插入；在代码块里 = 换语言并重新高亮
+   * （代码块对象在打开面板时就锁定，避免面板抢焦点后选区丢失）
+   */
+  openCode() {
+    const button = this.buttons.get('code')
+    const block = codeBlockAt(this.editor.root)
+    this.togglePop('code', button, () =>
+      codePanel({
+        languages: this.editor.codeLanguages(),
+        value: block ? languageOf(block) || 'plaintext' : this.editor.lastCodeLang,
+        editing: !!block,
+        onPick: (lang) => {
+          this.editor.lastCodeLang = lang
+          this.editor.popover.close()
+          this.editor.restoreSelection()
+          if (block) this.editor.commands.setCodeLanguage(lang, block)
+          else this.editor.commands.insertCodeBlock('', lang)
+          this.editor.refresh()
+        },
+      }))
+  }
+
+  /**
+   * 打开 Markdown 导入面板：选文件 / 粘贴文本 → 预览 → 按落点导入
+   * （转换与落点模式都复用 options.markdown，保证面板与 API 行为一致）
+   */
+  openMarkdown() {
+    const button = this.buttons.get('markdown')
+    const editor = this.editor
+    const config = editor.options.markdown
+    this.togglePop('markdown', button, () =>
+      markdownPanel({
+        insertMode: normalizeInsertMode(config.insertMode),
+        accept: MARKDOWN_ACCEPT,
+        maxText: config.maxSize ? `单个文件上限 ${formatSize(config.maxSize)}` : '',
+        highlight: editor.options.code.highlight !== false,
+        onConvert: (text) => {
+          const html = markdownToHtml(text, config)
+          return { html, summary: markdownSummary(html) }
+        },
+        onImport: async ({ text, mode }) => {
+          editor.popover.close()
+          const result = await editor.importMarkdown(text, { mode })
+          return result.ok
+        },
+      }))
   }
 
   openTable() {

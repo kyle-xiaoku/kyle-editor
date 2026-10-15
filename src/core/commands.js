@@ -2,6 +2,7 @@
 import { getRange, insertNode, closestBlock } from './selection.js'
 import { sanitizeHtml } from './sanitize.js'
 import { h, uid, setMediaAlign } from './utils.js'
+import { codeBlockAt, codeElementOf, refreshCodeBlock, applyLanguage, languageOf } from './code.js'
 
 const MARKS = { bold: 'bold', italic: 'italic', underline: 'underline', strikeThrough: 'strike', through: 'strikethrough' }
 
@@ -187,13 +188,47 @@ export class Commands {
     this.editor.afterEdit()
   }
 
-  insertCodeBlock(code = '') {
+  /**
+   * 插入代码块（默认语言取 options.code.defaultLanguage），并把光标放进代码里
+   */
+  insertCodeBlock(code = '', lang) {
     const pre = document.createElement('pre')
     const codeEl = document.createElement('code')
     codeEl.textContent = code || '// 在这里输入代码'
     pre.appendChild(codeEl)
+    applyLanguage(pre, lang || this.editor.lastCodeLang)
+    refreshCodeBlock(pre)
     insertNode(this.root, pre)
     this.editor.afterEdit()
+    this.placeCaretIn(pre)
+    return pre
+  }
+
+  /** 切换光标所在（或显式指定）代码块的语言并重新高亮；caret 保持块内光标 */
+  setCodeLanguage(lang, target) {
+    const pre = target || codeBlockAt(this.root)
+    if (!pre) return null
+    const value = applyLanguage(pre, lang)
+    refreshCodeBlock(pre, { caret: true })
+    this.editor.afterEdit()
+    return value
+  }
+
+  /** 光标落在代码块内容末尾，插入后可以立刻敲代码 */
+  placeCaretIn(pre) {
+    const codeEl = codeElementOf(pre)
+    const range = document.createRange()
+    range.selectNodeContents(codeEl)
+    range.collapse(false)
+    const sel = window.getSelection()
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }
+
+  /** 当前光标所在代码块的语言；不在代码块中返回空串 */
+  currentCodeLang() {
+    const pre = codeBlockAt(this.root)
+    return pre ? languageOf(pre) : ''
   }
 
   insertDivider() {
@@ -210,6 +245,10 @@ export class Commands {
       range.deleteContents()
       const tmp = document.createElement('div')
       tmp.innerHTML = value
+      // 粘贴进来的代码块（含语言标记）在落地后补上高亮
+      tmp.querySelectorAll('pre').forEach((pre) => {
+        if (pre.querySelector('code') || pre.hasAttribute('data-k-lang')) refreshCodeBlock(pre)
+      })
       const frag = document.createDocumentFragment()
       while (tmp.firstChild) frag.appendChild(tmp.firstChild)
       const last = frag.lastChild

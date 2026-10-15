@@ -9,8 +9,8 @@ export interface KEditorVueProps {
   options?: KEditorOptions
   /** 只读 */
   disabled?: boolean
-  /** 编辑区高度(px)，优先级高于 options.height */
-  height?: number
+  /** 内容区高度(px)：优先级高于 options.height；不传 / 'auto' = 随内容自动撑开 */
+  height?: number | 'auto'
 }
 
 export interface KEditorVueEmits {

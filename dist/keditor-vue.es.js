@@ -7,7 +7,8 @@ const KEditorVue = {
     modelValue: { type: String, default: "" },
     options: { type: Object, default: () => ({}) },
     disabled: { type: Boolean, default: false },
-    height: { type: Number, default: null }
+    // 内容区高度：不传 = 自适应内容；传 px 固定；'auto' 同不传
+    height: { type: [Number, String], default: null }
   },
   emits: ["update:modelValue", "ready", "change", "upload", "error", "save", "blur", "focus"],
   setup(props, { emit, expose }) {
@@ -15,7 +16,7 @@ const KEditorVue = {
     const instance = shallowRef(null);
     const buildOptions = () => {
       const opts = { ...defaults, ...props.options, value: props.modelValue || "" };
-      if (props.height) opts.height = props.height;
+      if (props.height !== null && props.height !== "" && props.height !== void 0) opts.height = props.height;
       opts.onChange = (html) => {
         emit("update:modelValue", html);
         emit("change", html);

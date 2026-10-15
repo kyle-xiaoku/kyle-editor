@@ -1,16 +1,19 @@
 /**
  * 上传适配器集合
- * - mockAdapter：零后端，浏览器内模拟分片传输，产出 blob: 预览地址（开发/演示默认）
- * - httpAdapter：标准分片接口参考实现（init / chunk / complete / abort），对接真实后端只需给 URL
- * - simpleAdapter：单次直传接口包装
- * 自定义 adapter 只要实现 init?/put/complete? 三个方法即可，见 docs/upload-adapter.md
+ * - mockAdapter：零后端，浏览器内模拟传输，产出 blob: 预览地址（开发/演示默认）
+ *     同时实现 put()（分片链路）与 upload()（普通上传链路）
+ * - httpAdapter：真实后端适配器，只认一个地址，两种链路共用
+ *     · 普通上传：upload() 整个文件一次请求，响应里 url 非空即成功
+ *     · 分片上传：put() 分片并发，响应里 url 非空即代表整份文件上传成功（服务端收齐分片后返回）
+ * - simpleAdapter：把「一个文件一次请求」的函数包装成普通上传适配器
+ * 自定义 adapter 实现 upload()（普通）或 put()（分片）即可，见 docs/upload-adapter.md
  */
-import { ChunkUploader, simpleAdapter } from './chunk-uploader.js'
+import { ChunkUploader, SimpleUploader, simpleAdapter } from './uploaders.js'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const jitter = (base, ratio = 0.4) => base * (1 - ratio + Math.random() * ratio * 2)
 
-/** 默认演示用：不请求任何服务，把文件切片“传完”后生成 objectURL */
+/** 默认演示用：不请求任何服务，把文件“传完”后生成 objectURL */
 export function mockAdapter(options = {}) {
   const {
     latency = 160, // 每个分片的固定网络往返（ms）
@@ -28,8 +31,21 @@ export function mockAdapter(options = {}) {
 
   const emit = (type, payload) => onEvent?.(type, { ...payload, at: Date.now() })
 
+  const urlFor = (file, meta) => {
+    let url = objectUrls.get(meta.fingerprint)
+    if (!url || !reuseObjectUrl) {
+      // 生成与业务无关的本地地址，编辑器直接可预览
+      const blob = file instanceof File ? file : new File([file], meta.name, { type: meta.type })
+      url = URL.createObjectURL(blob)
+      objectUrls.set(meta.fingerprint, url)
+    }
+    return url
+  }
+  const remember = (meta, url) => finished.set(meta.fingerprint, { url, name: meta.name, size: meta.size, type: meta.type })
+
   return {
     name: 'mock',
+    /* ---------------- 分片上传链路 ---------------- */
     async init(meta) {
       emit('init', meta)
       await sleep(120)
@@ -60,16 +76,36 @@ export function mockAdapter(options = {}) {
     },
     async complete({ uploadId, meta, file }) {
       await sleep(140)
-      let url = objectUrls.get(meta.fingerprint)
-      if (!url || !reuseObjectUrl) {
-        // 生成与业务无关的本地地址，编辑器直接可预览
-        const blob = file instanceof File ? file : new File([file], meta.name, { type: meta.type })
-        url = URL.createObjectURL(blob)
-        objectUrls.set(meta.fingerprint, url)
-      }
-      finished.set(meta.fingerprint, { url, name: meta.name, size: meta.size, type: meta.type })
+      const url = urlFor(file, meta)
+      remember(meta, url)
       sessions.delete(uploadId)
       emit('complete', { name: meta.name, url, chunks: meta.totalChunks, size: meta.size })
+      return { url, key: meta.fingerprint }
+    },
+    /* ---------------- 普通上传链路 ---------------- */
+    async upload(file, ctx = {}) {
+      const meta = {
+        name: file.name || 'blob',
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        // 不做哈希：演示用「文件名 + 大小 + 修改时间」即可识别同一份文件
+        fingerprint: `${file.name || 'blob'}|${file.size}|${file.lastModified || 0}`,
+      }
+      const hit = finished.get(meta.fingerprint)
+      if (hit) {
+        ctx.onProgress?.(file.size, file.size)
+        emit('instant', { name: meta.name, url: hit.url })
+        return { url: hit.url, key: meta.fingerprint, instant: true }
+      }
+      const cost = Math.max(140, jitter(latency * 2 + file.size / (speed * 1024 / 8) / 6, 0.3))
+      const steps = 6
+      for (let i = 1; i <= steps; i += 1) {
+        await sleep(cost / steps)
+        ctx.onProgress?.(Math.round((file.size * i) / steps), file.size)
+      }
+      const url = urlFor(file, meta)
+      remember(meta, url)
+      emit('upload', { name: meta.name, url, size: meta.size })
       return { url, key: meta.fingerprint }
     },
     async abort({ uploadId }) {
@@ -84,32 +120,47 @@ export function mockAdapter(options = {}) {
   }
 }
 
+/** 从接口响应里取上传成功地址：只要拿到非空 url 就认为成功 */
+function pickUrlOf(payload) {
+  if (!payload || typeof payload !== 'object') return ''
+  const value = payload.url || payload.fileUrl || payload.src
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/** 已移除的三接口模式字段：配到就报错，避免旧配置静默失效 */
+const LEGACY_FIELDS = ['initUrl', 'chunkUrl', 'completeUrl', 'abortUrl']
+
 /**
- * 真实后端参考实现
- * config = {
- *   initUrl, chunkUrl, completeUrl, abortUrl,
- *   mode: 'raw' | 'formdata',        // 分片是裸 body 还是 multipart
- *   headers: () => ({}) | object,    // 鉴权
- *   withCredentials, fieldName, parse: (json) => ({url, ...})
- * }
+ * 真实后端适配器：只配一个接口地址
+ *
+ * httpAdapter({ url: '/api/upload' })
+ *   普通上传（SimpleUploader 调用 upload()）→ 整个文件一次请求
+ *   分片上传（ChunkUploader 调用 put()）    → 每个分片一次请求，响应带 url 即整份成功
+ *
+ * 可配：mode('formdata'|'raw')、method、headers、withCredentials、fieldName、
+ *       parse（解开外层包装）、pickUrl（自定义取 url 规则）、chunkUrlFor（动态分片地址）
  */
 export function httpAdapter(config = {}) {
-  const {
-    initUrl,
-    chunkUrl,
-    completeUrl,
-    abortUrl,
-    mode = 'raw',
-    fieldName = 'file',
-    headers = {},
-    withCredentials = false,
-    parse = (json) => json?.data || json || {},
-    chunkUrlFor,
-  } = config
-
+  const { url, fieldName = 'file', headers = {}, withCredentials = false, parse = (json) => json?.data || json || {}, pickUrl = pickUrlOf, chunkUrlFor } = config
+  const legacy = LEGACY_FIELDS.filter((key) => config[key])
+  if (legacy.length) {
+    throw new Error(
+      `[KEditor] 分片上传已改为「单接口」模式：请删除 httpAdapter 的 ${legacy.join(' / ')}，只保留 url。` +
+        '服务端在处理分片时返回 { "url": "…" } 即代表上传成功。',
+    )
+  }
+  if (!url) throw new Error('[KEditor] httpAdapter 缺少接口地址：httpAdapter({ url: "/api/upload" })')
+  const mode = config.mode || 'formdata'
+  const httpMethod = config.method || (mode === 'formdata' ? 'POST' : 'PUT')
+  // 响应里的 url 提取出来交给调度器判断成功
+  const withUrl = (payload) => {
+    const found = (typeof pickUrl === 'function' ? pickUrl(payload) : '') || ''
+    return found ? { ...(payload && typeof payload === 'object' ? payload : {}), url: found } : payload || {}
+  }
   const headerOf = () => (typeof headers === 'function' ? headers() || {} : headers || {})
-  const request = async (url, init = {}) => {
-    const res = await fetch(url, { credentials: withCredentials ? 'include' : 'same-origin', ...init })
+
+  const request = async (target, init = {}) => {
+    const res = await fetch(target, { credentials: withCredentials ? 'include' : 'same-origin', ...init })
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
     const text = await res.text()
     if (!text) return {}
@@ -120,87 +171,44 @@ export function httpAdapter(config = {}) {
     }
   }
 
-  return {
-    name: 'http',
-    async init(meta, { signal }) {
-      if (!initUrl) throw new Error('[KEditor] httpAdapter 缺少 initUrl')
-      return request(
-        initUrl,
-        {
-          method: 'POST',
-          signal,
-          headers: { 'Content-Type': 'application/json', ...headerOf() },
-          body: JSON.stringify({
-            fileName: meta.name,
-            fileSize: meta.size,
-            fileType: meta.type,
-            lastModified: meta.lastModified,
-            identifier: meta.fingerprint,
-            chunkSize: meta.chunkSize,
-            totalChunks: meta.totalChunks,
-          }),
-        },
-      )
-    },
-    async put({ uploadId, index, total, blob, meta, signal }) {
-      if (!chunkUrl) throw new Error('[KEditor] httpAdapter 缺少 chunkUrl')
-      const url = typeof chunkUrlFor === 'function' ? chunkUrlFor({ uploadId, index }) : chunkUrl
-      if (mode === 'formdata') {
-        const form = new FormData()
-        form.append(fieldName, blob, `${meta.name}.part${index}`)
-        form.append('uploadId', uploadId)
-        form.append('identifier', meta.fingerprint)
+  const withQuery = (target, pairs) => `${target}${target.includes('?') ? '&' : '?'}${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`
+
+  /** 普通上传发整文件，分片上传发单个分片，字段命名保持一致 */
+  const send = async ({ target, body, name, index, total, meta, signal }) => {
+    if (mode === 'formdata') {
+      const form = new FormData()
+      form.append(fieldName, body, index === undefined ? name : `${name}.part${index}`)
+      form.append('filename', name)
+      form.append('fileSize', String(meta.size))
+      if (meta.identifier) form.append('identifier', meta.identifier)
+      if (index !== undefined) {
         form.append('index', String(index))
         form.append('total', String(total))
-        form.append('filename', meta.name)
-        return request(url, { method: 'POST', body: form, signal, headers: headerOf() })
+        form.append('chunkSize', String(meta.chunkSize))
       }
-      // 裸 body：服务端按 uploadId + index 落盘
-      const joiner = url.includes('?') ? '&' : '?'
-      const target = `${url}${joiner}uploadId=${encodeURIComponent(uploadId)}&index=${index}&total=${total}&filename=${encodeURIComponent(meta.name)}`
-      return request(target, {
-        method: 'PUT',
-        body: blob,
-        signal,
-        headers: { 'Content-Type': 'application/octet-stream', 'X-Chunk-Index': String(index), ...headerOf() },
-      })
+      return withUrl(await request(target, { method: httpMethod, body: form, signal, headers: headerOf() }))
+    }
+    // 裸 body：服务端按 identifier + index 落盘
+    const query = index === undefined ? [['filename', name], ['fileSize', meta.size]] : [['identifier', meta.identifier], ['index', index], ['total', total], ['filename', name]]
+    const headersOut = index === undefined ? { 'Content-Type': 'application/octet-stream' } : { 'Content-Type': 'application/octet-stream', 'X-Chunk-Index': String(index) }
+    return withUrl(await request(withQuery(target, query), { method: httpMethod, body, signal, headers: { ...headersOut, ...headerOf() } }))
+  }
+
+  return {
+    name: 'http',
+    /** 响应带非空 url 即代表上传成功（分片链路据此提前收工） */
+    completeOnUrl: true,
+    url,
+    /** 普通上传：整个文件一次请求 */
+    async upload(file, ctx = {}) {
+      return send({ target: url, body: file, name: file.name || 'file', meta: { size: file.size, identifier: '' }, signal: ctx.signal })
     },
-    async complete({ uploadId, meta, total }) {
-      if (!completeUrl) throw new Error('[KEditor] httpAdapter 缺少 completeUrl')
-      return request(
-        completeUrl,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headerOf() },
-          body: JSON.stringify({ uploadId, identifier: meta.fingerprint, fileName: meta.name, fileSize: meta.size, fileType: meta.type, chunkSize: meta.chunkSize, totalChunks: total }),
-        },
-      )
-    },
-    async abort({ uploadId }) {
-      if (!abortUrl) return
-      await request(abortUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headerOf() }, body: JSON.stringify({ uploadId }) }).catch(() => {})
+    /** 分片上传：一个分片一次请求 */
+    async put({ index, total, blob, meta, signal }) {
+      const target = typeof chunkUrlFor === 'function' ? chunkUrlFor({ index, total }) : url
+      return send({ target, body: blob, name: meta.name, index, total, meta: { size: meta.size, chunkSize: meta.chunkSize, identifier: meta.fingerprint }, signal })
     },
   }
 }
 
-/**
- * 归一化用户传入的 uploader 配置，返回 ChunkUploader 实例
- * 支持：undefined('mock') | 'mock' | {type:'mock'|'http', ...} | adapter 对象 | (file)=>url 函数 | ChunkUploader
- */
-export function createUploader(option = 'mock', config = {}) {
-  if (option instanceof ChunkUploader) return option
-  if (typeof option === 'function' && !option.put) return new ChunkUploader(simpleAdapter(option), config)
-  if (option && typeof option === 'object' && !(option instanceof ChunkUploader)) {
-    if (typeof option.put === 'function' || typeof option.upload === 'function') return new ChunkUploader(option, { ...config, ...pick(option) })
-    if (option.type === 'http') return new ChunkUploader(httpAdapter(option), { ...config, ...pick(option) })
-  }
-  return new ChunkUploader(mockAdapter(typeof option === 'object' ? option : {}), config)
-}
-
-const pick = (obj) => {
-  const out = {}
-  for (const key of ['chunkSize', 'concurrency', 'retries', 'fingerprint']) if (obj[key] !== undefined) out[key] = obj[key]
-  return out
-}
-
-export { ChunkUploader, simpleAdapter }
+export { ChunkUploader, SimpleUploader, simpleAdapter }

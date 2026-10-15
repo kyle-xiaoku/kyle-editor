@@ -1,6 +1,21 @@
-/** 粘贴 / 拖拽：截图与文件直传、Word 内容净化、外链图片可选本地化 */
+/** 粘贴 / 拖拽：截图与文件直传、Word 内容净化、Markdown 文档转换、外链图片可选本地化 */
 import { sanitizeHtml, isWordHtml, cleanWordHtml } from './sanitize.js'
 import { escapeHtml } from './sanitize.js'
+import { isMarkdownFile } from './markdown.js'
+
+/** 把文件分成「Markdown 文档」与「图片/视频」两组 */
+export function splitFiles(files) {
+  const docs = []
+  const media = []
+  for (const file of files) (isMarkdownFile(file) ? docs : media).push(file)
+  return { docs, media }
+}
+
+/** 导入 Markdown 文档（可以多份，按当前落点模式依次导入） */
+async function importDocs(editor, docs) {
+  for (const doc of docs) await editor.importMarkdown(doc)
+  return docs.length
+}
 
 export function attachPaste(editor) {
   editor.root.addEventListener('paste', async (event) => {
@@ -11,9 +26,12 @@ export function attachPaste(editor) {
 
     const files = filesFromDataTransfer(dt)
     if (files.length) {
+      const { docs, media } = splitFiles(files)
+      if (docs.length) await importDocs(editor, docs)
+      if (!media.length) return
       if (editor.options.paste.uploadFiles) {
-        await editor.media.addFiles(files)
-        editor.toast.show(`已上传 ${files.length} 个文件`)
+        await editor.media.addFiles(media)
+        editor.toast.show(`已上传 ${media.length} 个文件`)
       } else {
         editor.toast.warn('当前配置不允许粘贴上传文件')
       }
@@ -92,8 +110,10 @@ export function attachDrop(editor) {
     placeCaretAtPoint(editor, event)
     const files = [...(event.dataTransfer.files || [])]
     if (!files.length) return
-    if (editor.options.paste.uploadFiles) {
-      const count = await editor.media.addFiles(files)
+    const { docs, media } = splitFiles(files)
+    if (docs.length) await importDocs(editor, docs)
+    if (media.length && editor.options.paste.uploadFiles) {
+      const count = await editor.media.addFiles(media)
       if (count) editor.toast.show(`已上传 ${count} 个文件`)
     }
   })

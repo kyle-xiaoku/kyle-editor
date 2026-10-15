@@ -26,8 +26,18 @@ export { DEFAULT_TOOLBAR } from './core/toolbar.js'
 export { normalizeCustomButtons, normalizePosition, normalizeItems } from './core/custom-button.js'
 export { sanitizeHtml, escapeHtml, isSafeUrl, cleanWordHtml } from './core/sanitize.js'
 export { formatHtml } from './core/format.js'
-export { ChunkUploader, simpleAdapter } from './upload/chunk-uploader.js'
-export { createUploader, mockAdapter, httpAdapter } from './upload/adapters.js'
+export { LANGUAGES, highlightCode, normalizeLang, languageLabel, listLanguages, isCodeBlock } from './core/code.js'
+export {
+  markdownToHtml,
+  markdownSummary,
+  isMarkdownFile,
+  readMarkdownFile,
+  normalizeInsertMode,
+  MARKDOWN_ACCEPT,
+} from './core/markdown.js'
+export { ChunkUploader, SimpleUploader, simpleAdapter } from './upload/uploaders.js'
+export { UploadPipeline, createSimpleUploader, createChunkUploader } from './upload/pipeline.js'
+export { mockAdapter, httpAdapter } from './upload/adapters.js'
 export { fastFingerprint, strongFingerprint } from './upload/fingerprint.js'
 export { maybeCompress } from './media/media.js'
 

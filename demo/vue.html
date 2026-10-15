@@ -85,10 +85,12 @@
           const options = {
             placeholder: 'Vue 组件里同样支持拖拽 / 粘贴上传…',
             height: 420,
-            // 默认使用内置 mock 适配器（无需后端），对接真实服务改成：
-            // uploader: { type: 'http', initUrl: '/api/upload/init', chunkUrl: '/api/upload/chunk', completeUrl: '/api/upload/complete' }
+            // 默认使用内置 mock 适配器（无需后端）。对接真实服务分两条链路各自配置：
+            // uploader: '/api/upload',              // 普通上传：整个文件一次请求
+            // chunkUploader: '/api/chunk-upload',   // 分片上传：>=5MB 自动切片，响应带 url 即成功
             uploader: 'mock',
-            upload: { chunkSize: 512 * 1024, concurrency: 3 },
+            chunkUploader: 'mock',
+            upload: { mode: 'auto', chunkThreshold: 5 * 1024 * 1024, chunkSize: 512 * 1024, concurrency: 3 },
             // 自定义工具栏按钮：数据由 Vue 侧请求后用 editor.setButtonOptions 灌入
             customButtons: [
               {

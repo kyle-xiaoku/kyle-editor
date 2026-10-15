@@ -11,7 +11,8 @@ export const KEditorVue = {
     modelValue: { type: String, default: '' },
     options: { type: Object, default: () => ({}) },
     disabled: { type: Boolean, default: false },
-    height: { type: Number, default: null },
+    // 内容区高度：不传 = 自适应内容；传 px 固定；'auto' 同不传
+    height: { type: [Number, String], default: null },
   },
   emits: ['update:modelValue', 'ready', 'change', 'upload', 'error', 'save', 'blur', 'focus'],
   setup(props, { emit, expose }) {
@@ -20,7 +21,8 @@ export const KEditorVue = {
 
     const buildOptions = () => {
       const opts = { ...defaults, ...props.options, value: props.modelValue || '' }
-      if (props.height) opts.height = props.height
+      // 0 / '' / null 均视为自适应（默认）
+      if (props.height !== null && props.height !== '' && props.height !== undefined) opts.height = props.height
       opts.onChange = (html) => {
         emit('update:modelValue', html)
         emit('change', html)

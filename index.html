@@ -15,7 +15,7 @@
   <body>
     <div class="header">
       <h1>KEditor</h1>
-      <span class="tag">纯前端 · 分片上传 · 源码模式</span>
+      <span class="tag">纯前端 · 普通/分片上传 · 源码模式</span>
       <div class="nav">
         <a class="btn btn-primary" href="demo/script.html">Script 引入 Demo</a>
         <a class="btn" href="demo/esm.html">ESM 引入 Demo</a>
@@ -26,7 +26,7 @@
     <main>
       <section class="hero">
         <h2>像写公众号一样写作</h2>
-        <p>677px 纸张版式、绿色主题、拖拽即传。图片与视频走分片上传（可取消、失败自动重试、支持断点续传与秒传），随时切换到 HTML 源码模式查看或改写产物。</p>
+        <p>677px 纸张版式、绿色主题、拖拽即传。图片与视频走上传（小文件整包一次请求、大文件自动切片并发，可取消、失败自动重试、支持断点续传与秒传），代码块可选 20 种语言并语法高亮，支持导入 Markdown 文件/文本转为可编辑 HTML，随时切换到 HTML 源码模式查看或改写产物。</p>
         <div class="row-btns">
           <a class="btn btn-primary" href="demo/script.html">打开编辑器 Demo</a>
           <a class="btn" href="docs/api.md">API 文档</a>
@@ -44,8 +44,8 @@
           <p><code class="inline">app.use(KEditorVue)</code> 后即可 <code class="inline">&lt;k-editor v-model="html" /&gt;</code>，支持 disabled 与自定义 options。</p>
         </div>
         <div class="tile">
-          <h3>分片上传可插拔</h3>
-          <p>内置 mock 适配器开箱即用，一行换成 <code class="inline">{type:'http'}</code> 对接真实后端；图片与视频也支持直接粘贴网络链接插入。</p>
+          <h3>上传两条链路，各自配置</h3>
+          <p>内置 mock 适配器开箱即用；对接真实后端：<code class="inline">uploader: '/api/upload'</code>（普通上传，整包一次请求）+ <code class="inline">chunkUploader: '/api/chunk-upload'</code>（分片上传，响应里 <code class="inline">url</code> 非空即成功），小文件与大文件自动选路；图片与视频也支持直接粘贴网络链接插入。</p>
         </div>
         <div class="tile">
           <h3>源码模式</h3>
@@ -54,6 +54,14 @@
         <div class="tile">
           <h3>自定义工具栏按钮</h3>
           <p><code class="inline">customButtons</code> 加一个下拉选择按钮：选项可静态配置或从接口读取（带加载/重试/搜索/分组），选中后按模板插入跳转链接或直接打开；<code class="inline">position</code> 决定它站在工具栏的哪个位置（含右侧吸附尾栏）。</p>
+        </div>
+        <div class="tile">
+          <h3>代码块选语言 + 高亮</h3>
+          <p>工具栏「代码块」按钮直接展开语言面板（20 种语言，可按 <code class="inline">js</code> / <code class="inline">mysql</code> 等别名搜索）：块内可边写边高亮，光标在块内时选一项即改写该块语言；导出与源码模式始终是<strong>不带高亮标签的干净代码</strong>。</p>
+        </div>
+        <div class="tile">
+          <h3>高度默认自适应</h3>
+          <p>不写 <code class="inline">height</code> 就随内容自动擑开（整页滚动，工具栏尽量吸附视口顶部）；配了才固定高度并在编辑区内部滚动，<code class="inline">setHeight()</code> 可运行时切换。</p>
         </div>
         <div class="tile">
           <h3>宽屏版心自适应</h3>

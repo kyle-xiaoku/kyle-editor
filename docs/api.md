@@ -18,7 +18,7 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 |------|------|--------|------|
 | `value` | `string` | `''` | 初始 HTML；留空时取挂载节点的 `innerHTML` |
 | `placeholder` | `string` | `'开始撰写内容…'` | 空内容占位文案 |
-| `height` | `number` | `460` | 编辑区可视高度（px），`0` 为自适应内容高度 |
+| `height` | `number \| 'auto'` | `0` | 内容区高度：`0` / `'auto'` / 不写 = **随内容自动撑开**（整页滚动）；填 px 才固定高度并内部滚动 |
 | `minHeight` | `number` | `320` | 纸张最小高度 |
 | `paperWidth` | `number` | `677` | 版心基准宽度（与公众号一致）；`fluid` 模式下它是最小宽度 |
 | `paperMode` | `'fluid' \| 'fixed'` | `'fluid'` | 宽屏时版心随容器生长（两侧留白恒定）/ 恒定 `paperWidth + 64` |
@@ -35,12 +35,22 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 | `wordCount` | `boolean` | `true` | 底部字数/媒体统计 |
 | `sanitize` | `boolean` | `true` | 初始化与 `setContent` 时净化 HTML |
 | `historyLimit` | `number` | `60` | 撤销栈深度 |
-| `uploader` | `'mock' \| object \| fn \| ChunkUploader` | `'mock'` | 上传适配器，见 [upload-adapter.md](upload-adapter.md) |
-| `upload` | `object` | `{chunkSize:1MB, concurrency:3, retries:2, fingerprint:'fast'}` | 分片参数 |
+| `uploader` | `string \| object \| fn \| SimpleUploader` | `'mock'` | **普通上传**（整个文件一次请求）：直接给接口地址（如 `'/api/upload'`）即可；也可 `{type:'http', url}` / 自定义 adapter / 函数，见 [upload-adapter.md](upload-adapter.md)。只配本项时不启用分片上传 |
+| `chunkUploader` | `string \| object \| fn \| ChunkUploader` | `'mock'` | **分片上传**（切片并发，只打一个接口，响应里 `url` 非空即成功）；`null` 表示不启用分片。与 `uploader` 都配置时按 `upload.mode` 选路；只配本项时 `mode` 自动为 `'chunk'` |
+| `upload` | `object` | `{mode:'auto', chunkThreshold:5MB, chunkSize:1MB, concurrency:3, retries:2, fingerprint:'fast'}` | 链路与分片参数；`mode` 为 `'auto'`（按体积）/ `'normal'`（只普通）/ `'chunk'`（只分片），另支持 `completeOnUrl` 覆盖「响应带 url 即成功」判定 |
 | `image.compress` | `object\|false` | `{maxWidth:1440, quality:0.85, minSize:300KB}` | 上传前大图压缩 |
 | `maxImageSize` | `number` | `20MB` | 图片体积上限，超限拦截 |
 | `maxVideoSize` | `number` | `512MB` | 视频体积上限 |
 | `imageAccept` / `videoAccept` | `string` | 常见图/视频类型 | 文件选择器 `accept` |
+| `code.languages` | `string[]` | `[]` | 代码块可选语言（主名或别名，如 `['js','mysql','yml']`）；留空 = 全部 20 种 |
+| `code.defaultLanguage` | `string` | `'plaintext'` | 新建代码块的默认语言；不在 `languages` 内会落到清单第一项 |
+| `code.highlight` | `boolean` | `true` | 是否语法高亮；`false` 时只保留纯文本（语言标记照写） |
+| `markdown.insertMode` | `'replace'\|'append'\|'cursor'` | `'replace'` | Markdown 导入默认落点：替换全文 / 追加文末 / 插入光标（面板里可临时改） |
+| `markdown.maxSize` | `number` | `5MB` | 单个 Markdown 文件体积上限（字节），`0` = 不限制 |
+| `markdown.gfm` | `boolean` | `true` | GFM 扩展：表格 / 删除线 / 任务列表 / 裸链接 |
+| `markdown.breaks` | `boolean` | `false` | 段落内单换行是否转 `<br>` |
+| `markdown.linkTarget` | `boolean\|string` | `false` | 外链自动加 `target` + `rel="noopener noreferrer"` |
+| `markdown.frontMatter` | `boolean` | `true` | 丢弃开头的 YAML front matter |
 | `paste.enabled` | `boolean` | `true` | 接管粘贴 |
 | `paste.clean` | `boolean` | `true` | 粘贴内容净化（Word/WPS 自动清洗） |
 | `paste.uploadFiles` | `boolean` | `true` | 粘贴截图/文件即上传 |
@@ -50,9 +60,11 @@ const editor = KEditor.create(el, options)   // el: 选择器 / HTMLElement / Vu
 
 `undo` `redo` `heading` `fontsize` `bold` `italic` `underline` `strike` `foreColor` `backColor`
 `alignLeft` `alignCenter` `alignRight` `alignJustify` `ul` `ol` `quote` `link` `image` `video`
-`table` `code` `hr` `clear` `source` `preview` `fullscreen`；分隔符 `'|'`，右对齐标记 `':tail'`。
+`table` `code` `markdown` `hr` `clear` `source` `preview` `fullscreen`；分隔符 `'|'`，右对齐标记 `':tail'`。
 
-> `preview` **不在默认工具栏里**（默认尾栏只有「源码 / 全屏」），需要时手动写回 `toolbar`，或直接调 `editor.openPreview()`。
+> `preview` **不在默认工具栏里**（默认尾栏为「导入MD / 源码 / 全屏」），需要时手动写回 `toolbar`，或直接调 `editor.openPreview()`。
+>
+> `code` 按钮点击展开**语言面板**（见下方面板一览与「代码块」一节），不再直接插入空代码块。
 
 此外可放入 `customButtons` 里定义的**按钮 `name`**（如 `toolbar: ['bold', '|', 'tpl']`）。
 **未传 `toolbar` 时，自定义按钮会自动插入工具栏**：写了 `position` 按 `position` 放，没写则追加到主区末尾（插在 `:tail` 之前）。
@@ -70,7 +82,7 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | 左缘渐隐 | 已向右滑出时提示左边还有内容 |
 | 首次引导气泡 | 「工具栏可左右滑动」，3.8s 后或首次滑动后消失，`localStorage` 记忆不重复弹 |
 
-鼠标还可**直接按住拖动**平移工具栏（光标变为抓握状）；触屏沿用系统原生滑动。`:tail` 之后的「源码 / 全屏」（以及 `position:'tail'` 的自定义按钮）始终吸附在右端可见。
+鼠标还可**直接按住拖动**平移工具栏（光标变为抓握状）；触屏沿用系统原生滑动。`:tail` 之后的「导入MD / 源码 / 全屏」（以及 `position:'tail'` 的自定义按钮）始终吸附在右端可见。
 
 #### 下拉面板一览
 
@@ -83,6 +95,8 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 | `image` / `video` | 展开插入面板 | 两个页签：**本地上传**（点击或拖拽到虚线区）/ **网络链接**（粘贴地址即可插入，附带可访问性校验提示） |
 | `table` | 展开网格 | 10×8 规格选择，实时显示「N 列 × M 行」 |
 | `link` | 展开表单 | 文字 / 地址 / 新窗口打开，已链接时提供「移除链接」 |
+| `code` | 展开「插入代码块 / 代码块语言」面板 | 20 种语言列表（含一句话说明），支持按名称/别名搜索（`js`、`mysql`、`yml`…）与键盘回车；**光标不在代码块内**=插入新块，**光标在块内**=改写该块语言 |
+| `markdown` | 展开「导入 Markdown」面板（按钮文案：导入MD） | 两个页签：**选择文件**（点击或拖拽到虚线区，`.md/.markdown/.txt`，自动识别编码）/ **粘贴文本**；下方为三种落点（替换全文 / 追加文末 / 插入光标）+ **实时转换预览**与结构统计；标题栏显示字符数，底部「导入到正文」 |
 
 面板统一样式：圆角卡片 + 标题栏 + 分区小标题 + 入场动画；打开时会自动记录正文选区，操作后还原，因此**先选文字再点颜色**一定生效。
 
@@ -153,7 +167,7 @@ toolbar: ['undo', 'redo', '|', 'bold', 'italic', '|', 'image', 'video', ':tail',
 |------|------|
 | 不写 / `'end'` | 主区末尾，插在右侧吸附尾栏之前（多个未定位按钮共用一个分隔符） |
 | `'start'` | 工具栏第一位 |
-| `'tail'` | 尾栏末尾（与「源码 / 全屏」同区；未启用 `:tail` 时回退主区末尾） |
+| `'tail'` | 尾栏末尾（与「导入MD / 源码 / 全屏」同区；未启用 `:tail` 时回退主区末尾） |
 | `number` | 第 n 个按钮之前（0 起，按视觉顺序，分隔符不计数） |
 | `'image'` 等按钮名 | 插到该按钮之前 |
 | `{ before: name }` / `{ after: name }` | 显式锚点；锚点可以是内置按钮，也可以是另一个自定义按钮 |
@@ -219,10 +233,13 @@ editor.setButtonOptions(name, items) // 外部灌入数据（成为权威数据�
 editor.getButtonValue(name)       // 当前选中项
 editor.setButtonValue(name, value)// 设置选中项，按钮文案同步
 editor.toolbar.openCustom(name)   // 代码打开面板
+editor.toolbar.openCode()         // 打开代码块语言面板（等同点击工具栏「代码块」）
 editor.toolbar.buttonNodes()      // 当前工具栏按钮节点（按视觉顺序，不含分隔符）
 
 editor.setPaper({ width, mode, gap, maxWidth })  // 运行时改版心
 editor.paperOptions()                            // 读当前版心配置
+editor.setHeight(600)                            // 运行时固定高度；setHeight(0) / setHeight('auto') 回到自适应
+editor.heightOptions()                           // { height: 0, auto: true }
 ```
 
 #### 示例
@@ -240,6 +257,45 @@ KEditor.create('#editor', {
     { name: 'date', type: 'button', text: '日期', onClick: ({ editor }) => editor.commands.insertHTML('<p>2026-10-13</p>') },
   ],
 })
+```
+
+### 代码块（语言 + 语法高亮）
+
+内置 20 种语言（`plaintext` `javascript` `typescript` `html` `css` `json` `python` `java` `go` `rust` `c` `csharp` `php` `ruby` `sql` `bash` `yaml` `ini` `markdown` `diff`），并支持别名（`js` `ts` `py` `golang` `yml` `sh` `md` `c++` `cs` `mysql` `toml` …）。
+
+```js
+// 插入（lang 可省，用 options.code.defaultLanguage）
+editor.insertCode('const a = 1', 'js')      // => <pre data-k-lang="javascript"><code class="language-javascript">…</code></pre>
+
+// 改写光标所在块的语言（返回生效语言；不在代码块内返回 null）
+editor.setCodeLanguage('sql')
+editor.getCodeLanguage()                    // 'sql'；不在块内为 ''
+
+editor.codeLanguages()                      // [{ value, label, hint }, …]（受 options.code.languages 裁剪）
+editor.highlightCode()                      // 手动重跑全量高亮，返回处理的代码块数量
+editor.lastCodeLang                         // 最近一次选择的语言（下次插入默认沿用）
+editor.getState().inCode                    // 光标是否在代码块内
+```
+
+标记与产物约定：
+
+- 语言同时写在 `<pre data-k-lang="javascript">` 与 `<code class="language-javascript">`；外部 HTML 只带 `class="language-xxx"` 也能识别并补上标记
+- 块右上角显示语言角标（`data-k-lang`，`plaintext` 不显示），纯 CSS 实现，不进入 `getHTML()`
+- **高亮只在编辑器/预览里显示**：`getHTML()`、源码模式、复制出去的 HTML 都是不含 token `<span>` 的干净代码，重新导入会自动重新高亮；预览面板走 `getHTML({ clean: 'preview' })`（同样清理内部属性，但保留高亮）
+- 在块内打字会（防抖 140ms）重新高亮并保持块内光标；输入法组字期间跳过；单块超过 60 KB 退化为纯文本
+- 样式类名 `ke-tok-{kw,str,com,num,typ,fn,op,var,tag,attr,sel,prop,key,bool,meta,ins,del}`，作用域限定在 `.ke-content` 内，宿主可覆盖配色
+
+### 导入 Markdown
+
+尾栏「导入MD」按钮打开导入面板（选文件 / 粘文本 + 实时预览 + 结构统计 + 三种落点）；把 `.md` / `.markdown` / `.txt` 文件拖进正文也会自动转换（默认替换全文）。转换产物就是正文规范里的普通 HTML，围栅代码块会带上 `data-k-lang` 并高亮。
+
+```js
+// 纯函数（不依赖实例）
+markdownToHtml('# 标题\n\n正文', { gfm: true })  // => '<h1>标题</h1>\n<p>正文</p>'
+markdownSummary(html)                            // => { headings, paragraphs, lists, items, codeBlocks, quotes, tables, images, links }
+isMarkdownFile({ name: 'a.md', type: '' })       // => true（按 MIME + 扩展名，.txt 也算）
+readMarkdownFile(file)                           // => 文本（严格 UTF-8 失败时回退 gb18030 / gbk / big5）
+normalizeInsertMode('append')                    // => 'append'（非法值 => 'replace'）
 ```
 
 ### 回调
@@ -262,14 +318,16 @@ editor.root                   // contenteditable 节点
 editor.options                // 合并后的配置
 editor.commands               // 指令集（可程序化调用）
 editor.media                  // 上传/媒体管理
-editor.uploader               // ChunkUploader 实例
+editor.uploader               // UploadPipeline：按 upload.mode / 体积自动选路（.pick(file) 可查询）
+editor.uploaders              // { normal: SimpleUploader, chunk: ChunkUploader | null }
 editor.history                // 撤销栈
 editor.readOnly / sourceMode / previewMode / fullscreen
+editor.lastCodeLang           // 最近选择的代码块语言
 ```
 
 | 方法 | 说明 |
 |------|------|
-| `getHTML({clean?})` | 取当前 HTML，默认剔除编辑器内部属性、未完成占位块 |
+| `getHTML({clean?})` | 取当前 HTML，默认剔除编辑器内部属性、未完成占位块；`clean: false` 取原始 HTML（调试用），`clean: 'preview'` 保留代码高亮 |
 | `getText()` | 纯文本 |
 | `getJSON()` | `{html, text, counts}` |
 | `setContent(html, {sanitize?, silent?})` | 覆盖内容 |
@@ -279,6 +337,15 @@ editor.readOnly / sourceMode / previewMode / fullscreen
 | `setReadOnly(bool)` | 切换只读 |
 | `undo()` / `redo()` | 撤销/重做（含光标位置恢复） |
 | `insertImage(url, alt?)` / `insertVideo(url, label?)` | 按地址插入媒体（等同工具栏「网络链接」页签） |
+| `insertCode(code?, lang?)` | 插入代码块，光标落在块内（`lang` 省则用 `options.code.defaultLanguage`） |
+| `setCodeLanguage(lang, target?)` | 改写代码块语言并重新高亮（`target` 省则取光标所在块）；返回生效语言，未命中返回 `null` |
+| `getCodeLanguage()` | 光标所在代码块的语言，不在块内返回 `''` |
+| `codeLanguages()` | 语言清单 `[{value,label,hint}]`（受 `options.code.languages` 裁剪） |
+| `highlightCode()` | 手动重跑正文全量高亮，返回处理的代码块数量 |
+| `importMarkdown(source, {mode?, silent?})` | 导入 Markdown（`source` 可为文本 / `File` / `{name,content}`）并转为 HTML，返回 `{ok, html, summary, mode, chars, name}`；失败为 `{ok:false, reason:'readonly'\|'error'}` |
+| `setMarkdown(source)` / `insertMarkdown(source)` / `appendMarkdown(source)` | 导入并分别替换全文 / 插入光标处 / 追加文末（等价于 `importMarkdown` + 指定 `mode`），均可 `await` |
+| `markdownOptions()` | 当前导入配置 `{insertMode, maxSize, auto}` |
+| `moveCaretToEnd()` | 光标 / 选区移到正文末尾（追加导入前的落点） |
 | `upload(file, kind?)` | 手动触发一次上传（自动判断图片/视频） |
 | `cancelUploads()` | 取消全部进行中任务 |
 | `counts()` | `{chars, words, images, videos, uploading}` |
@@ -287,6 +354,7 @@ editor.readOnly / sourceMode / previewMode / fullscreen
 | `toggleFullscreen()` | 全屏编辑 |
 | `addButton(spec, place?)` / `moveButton(name, where)` / `removeButton(name)` | 工具栏按钮增 / 移 / 删（详见自定义工具栏按钮） |
 | `setPaper({width?, mode?, gap?, maxWidth?})` / `paperOptions()` | 运行时改版心（宽屏留白策略） |
+| `setHeight(px \| 0 \| 'auto')` / `heightOptions()` | 运行时切换内容区高度（固定 / 自适应） |
 | `on(type, fn)` / `off(type, fn)` | 事件订阅，返回取消函数 |
 | `destroy()` | 卸载实例、清理监听与临时 URL |
 
@@ -306,6 +374,7 @@ editor.readOnly / sourceMode / previewMode / fullscreen
 | `sourcechange` | `{mode: 'source'\|'visual'}` | 源码模式切换 |
 | `customselect` | `{name, item, link, action, editor}` | 自定义下拉按钮选中一项；`action` 为 `'link'\|'html'\|'text'\|'open'\|'none'` |
 | `customclick` | `{name, editor}` | `type:'button'` 自定义按钮被点击 |
+| `markdownimport` | `{mode, name, summary, chars}` | Markdown 导入成功（`mode` 为实际落点，`name` 为文件名/空串） |
 | `error` | `{type, error, message}` | 内部异常（如自定义按钮 `onSelect` 抛错），同时走 `onError` |
 
 ---
@@ -323,7 +392,9 @@ editor.commands.toggleBlockquote()
 editor.commands.createLink({ url, text, target })
 editor.commands.removeLink()
 editor.commands.insertTable(3, 2)          // 列, 行
-editor.commands.insertCodeBlock('const a = 1')
+editor.commands.insertCodeBlock('const a = 1', 'js')   // 第二参为语言（可省）
+editor.commands.setCodeLanguage('python')             // 改写光标所在块语言
+editor.commands.currentCodeLang()                     // 光标所在块语言（''=不在块内）
 editor.commands.insertDivider()
 editor.commands.insertHTML('<p>富文本片段</p>')
 editor.commands.clearFormat()
@@ -334,24 +405,46 @@ editor.getState()                   // 当前选区状态（工具栏高亮用�
 
 ```js
 import { sanitizeHtml, formatHtml, escapeHtml, isSafeUrl, cleanWordHtml, mockAdapter, httpAdapter, simpleAdapter, ChunkUploader } from 'kyle-editor'
+import { highlightCode, listLanguages, normalizeLang, languageLabel, isCodeBlock, LANGUAGES } from 'kyle-editor'
 
 sanitizeHtml(dirtyHtml)      // 白名单净化，返回安全 HTML
 formatHtml(html)             // 缩进美化（编辑器源码模式同款）
 cleanWordHtml(wordHtml)      // 粘贴前的 Word/WPS 清洗
 isSafeUrl('javascript:1')    // => false
+
+highlightCode('const a = 1', 'js')  // => '<span class="ke-tok-kw">const</span> a <span class="ke-tok-op">=</span> …'（已转义，可直接 innerHTML）
+listLanguages(['js', 'mysql'])      // => [{ value:'javascript', … }, { value:'sql', … }]
+normalizeLang('MySQL')              // => 'sql'（未知语言 => 'plaintext'）
+languageLabel('js')                 // => 'JavaScript'
+isCodeBlock(preElement)             // => true（<pre> 且带 data-k-lang 或内含 <code>）
+
+markdownToHtml(md, options)         // Markdown → 正文规范 HTML（默认再过一遍白名单净化）
+markdownSummary(html)               // 统计标题/段落/列表/代码块/引用/表格/图片/链接数量
+isMarkdownFile(file)                // 按 MIME + 扩展名判断（.md/.markdown/.txt）
+readMarkdownFile(file)              // 读文件文本（UTF-8 → gb18030/gbk/big5 回退）
+normalizeInsertMode('cursor')       // => 'cursor'（非法值 => 'replace'）
+MARKDOWN_ACCEPT                     // <input accept> 用：'.md,.markdown,.txt,text/markdown,text/plain'
 ```
 
 UMD / 默认导出上也挂了一批静态成员，`<script>` 引入时直接可用：
 
 ```js
-KEditor.version                 // '1.0.0'
+KEditor.version                 // '1.0.7'
 KEditor.sanitizeHtml(html)      // 白名单净化
 KEditor.formatHtml(html)        // 源码美化
 KEditor.cleanWordHtml(html)     // Word 清洗
-KEditor.mockAdapter({speed})    // 内置分片模拟适配器
-KEditor.httpAdapter(config)     // 真实后端适配器
-KEditor.simpleAdapter(fn)       // 单次直传适配器
-KEditor.chunkUploader(file, adapter, opts) // 分片调度器
+KEditor.mockAdapter({speed})    // 内置模拟适配器（分片 put() + 整包 upload() 都支持）
+KEditor.httpAdapter(config)     // 真实后端适配器（只认一个 url，两条链路共用）
+KEditor.simpleAdapter(fn)       // 把「一个文件一次请求」的函数包成普通上传适配器
+KEditor.createSimpleUploader(option, uploadOptions) // 造一个 SimpleUploader（普通上传）
+KEditor.createChunkUploader(option, uploadOptions)  // 造一个 ChunkUploader（分片上传）
+KEditor.SimpleUploader / KEditor.ChunkUploader / KEditor.UploadPipeline // 对应类
+KEditor.highlightCode(code, lang)   // 代码高亮（纯字符串进、HTML 片段出）
+KEditor.listLanguages(only?)        // 语言清单，可按主名/别名裁剪
+KEditor.normalizeLang / KEditor.languageLabel / KEditor.isCodeBlock
+KEditor.LANGUAGES                   // 全部内置语言（value/label/aliases/hint）
+KEditor.markdownToHtml / KEditor.markdownSummary
+KEditor.isMarkdownFile / KEditor.readMarkdownFile / KEditor.normalizeInsertMode / KEditor.MARKDOWN_ACCEPT
 KEditor.utils                   // { uid, escapeHtml }
 KEditor.create(el, options)     // 工厂方法，等价于 new KEditor(...)
 KEditor.plugin                  // Vue 3 插件（仅 keditor-vue.umd.js）

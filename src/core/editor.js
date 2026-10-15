@@ -12,11 +12,20 @@ import { normalizeCustomButtons } from './custom-button.js'
 import { Commands } from './commands.js'
 import { History } from './history.js'
 import { MediaManager } from '../media/media.js'
-import { createUploader } from '../upload/adapters.js'
+import { createUploaders } from '../upload/pipeline.js'
 import { attachDrop, attachPaste } from './paste.js'
 import { sanitizeHtml, toPlainText } from './sanitize.js'
+import { highlightCodeBlocks, stripHighlight, refreshCodeBlock, codeBlockAt, listLanguages, normalizeLang } from './code.js'
+import { markdownToHtml, markdownSummary, readMarkdownFile, normalizeInsertMode } from './markdown.js'
 import { caretOffset, getRange, closestBlock } from './selection.js'
-import { debounce, h, clamp, getMediaAlign } from './utils.js'
+import { debounce, h, clamp, getMediaAlign, formatSize } from './utils.js'
+
+/** 初始语言：defaultLanguage 不在裁剪后的清单里时落到清单第一项 */
+function initialCodeLang(code) {
+  const list = listLanguages(code.languages)
+  const wanted = normalizeLang(code.defaultLanguage)
+  return list.some((item) => item.value === wanted) ? wanted : list[0].value
+}
 
 const KB = 1024
 const MB = 1024 * KB
@@ -24,8 +33,12 @@ const MB = 1024 * KB
 export const defaults = {
   value: '',
   placeholder: '开始撰写内容，支持拖拽 / 粘贴图片与视频…',
-  height: 460, // 编辑区可视高度（px），0 = 自适应
-  minHeight: 320,
+  height: 0, // 编辑区可视高度（px）：默认 0 = 随内容自动撑开；填了才固定高度并内部滚动
+  minHeight: 320, // 内容区最小高度（px），自适应模式下也生效
+  /** 代码块：可选语言列表、默认语言、是否语法高亮 */
+  code: { languages: [], defaultLanguage: 'plaintext', highlight: true },
+  /** Markdown 导入：落点模式（replace 替换全文 | append 追加文末 | cursor 光标处）/ 文件体积上限 / 转换选项 */
+  markdown: { insertMode: 'replace', maxSize: 5 * MB, gfm: true, breaks: false, linkTarget: false, frontMatter: true },
   primaryColor: '#07c160',
   paperWidth: 677, // 版心基准宽度：窄屏上限、宽屏最小宽度
   /** 版心宽度模式：'fluid' 宽屏随容器生长（两侧留白恒定）| 'fixed' 恒定版心 */
@@ -43,8 +56,20 @@ export const defaults = {
   wordCount: true,
   sanitize: true,
   historyLimit: 60,
-  uploader: 'mock', // 'mock' | {type:'http', ...} | adapter | fn | ChunkUploader
-  upload: { chunkSize: MB, concurrency: 3, retries: 2, fingerprint: 'fast' },
+  /** 普通上传（整个文件一次请求）：'mock' | 接口地址 | {url,…} | adapter | fn */
+  uploader: 'mock',
+  /** 分片上传（切片并发，接口返回 url 即成功）：同上；null 表示不启用分片 */
+  chunkUploader: 'mock',
+  upload: {
+    /** 'auto' 按体积自动选链路 | 'normal' 只走普通上传 | 'chunk' 只走分片上传 */
+    mode: 'auto',
+    /** auto 模式下达到该体积才走分片上传 */
+    chunkThreshold: 5 * MB,
+    chunkSize: MB,
+    concurrency: 3,
+    retries: 2,
+    fingerprint: 'fast',
+  },
   image: { compress: { maxWidth: 1440, quality: 0.85, minSize: 300 * KB } },
   maxImageSize: 20 * MB,
   maxVideoSize: 512 * MB,
@@ -66,6 +91,8 @@ export class KEditor {
     injectStyle()
     this.options = mergeOptions(options)
     this.id = `ke-${(instanceSeq += 1)}`
+    /** 上一次选过的代码语言：下次插入代码块时默认选中 */
+    this.lastCodeLang = initialCodeLang(this.options.code)
     this.el = resolveTarget(target, this.id)
     // 宿主节点反向引用：KEditor.replace() 靠它销毁旧实例，避免同一容器上叠加实例与监听泄漏
     this.el.__keditor__ = this
@@ -84,7 +111,11 @@ export class KEditor {
     this.toast = new Toast()
     this.popover = new Popover(this.el)
     this.commands = new Commands(this)
-    this.uploader = createUploader(this.options.uploader, this.options.upload)
+    const uploads = createUploaders(this.options)
+    /** 两条链路：{ normal, chunk } */
+    this.uploaders = { normal: uploads.normal, chunk: uploads.chunk }
+    /** 统一入口：按 upload.mode / 文件体积自动选路 */
+    this.uploader = uploads.pipeline
     this.media = createMedia(this)
     this.history = new History(this.root, { limit: this.options.historyLimit })
     this.toolbar = new Toolbar(this, this.options.toolbar, this.options.customButtons)
@@ -140,12 +171,37 @@ export class KEditor {
     if (!this.options.hideStatusbar) this.el.appendChild(this.statusEl)
     this.el.appendChild(this.dropzoneEl)
 
-    if (this.options.height) {
-      this.scrollEl.style.height = `${this.options.height}px`
-      this.scrollEl.style.maxHeight = `${this.options.height}px`
-    }
     this.paperEl.style.setProperty('--ke-min-height', `${this.options.minHeight}px`)
+    this.applyHeight()
     this.applyPaper()
+  }
+
+  /**
+   * 内容区高度：height 未配置（0）时随内容自动撑开，整页滚动；
+   * 配置了 height 才固定高度，内容超出时在编辑区内部滚动
+   */
+  applyHeight() {
+    const height = normalizeHeight(this.options.height)
+    if (height > 0) {
+      this.scrollEl.style.height = `${height}px`
+      this.scrollEl.style.maxHeight = `${height}px`
+    } else {
+      this.scrollEl.style.height = ''
+      this.scrollEl.style.maxHeight = ''
+    }
+    this.el.classList.toggle('ke-is-auto', height === 0)
+    return height
+  }
+
+  /** 运行时切换内容区高度：传 px 固定，传 0 / 'auto' 恢复自适应 */
+  setHeight(value) {
+    this.options.height = normalizeHeight(value)
+    return this.applyHeight()
+  }
+
+  /** 当前内容区高度配置：0 表示自适应 */
+  heightOptions() {
+    return { height: normalizeHeight(this.options.height), auto: normalizeHeight(this.options.height) === 0 }
   }
 
   /** 版心尺寸：宽屏下默认让版心随容器生长，两侧只保留固定留白 */
@@ -182,12 +238,19 @@ export class KEditor {
   bindEvents() {
     const debouncedChange = debounce(() => this.emitChange(), 160)
 
-    this.bind(this.root, 'input', () => {
+    this.bind(this.root, 'input', (event) => {
       this.history.snapshot()
       this.refreshStatus()
       this.togglePlaceholder()
+      this.queueCodeHighlight(event)
       debouncedChange()
       this.enforceMaxLength()
+    })
+    // 输入法组字期间不能重渲染，否则会打断中文候选
+    this.bind(this.root, 'compositionstart', () => { this.composing = true })
+    this.bind(this.root, 'compositionend', (event) => {
+      this.composing = false
+      this.queueCodeHighlight(event)
     })
 
     this.bind(this.root, 'keydown', (event) => this.handleKeydown(event))
@@ -336,6 +399,7 @@ export class KEditor {
       preview: this.previewMode,
       fullscreen: this.fullscreen,
       readOnly: this.readOnly,
+      inCode: !!codeBlockAt(this.root),
     }
   }
 
@@ -394,8 +458,9 @@ export class KEditor {
 
   getHTML({ clean = true } = {}) {
     const html = this.root.innerHTML
-    if (!clean) return html
-    return exportHtml(html)
+    if (clean === false) return html
+    // clean: 'preview' 与导出同样清理内部属性，但保留高亮 span（预览面板复用编辑器样式）
+    return exportHtml(html, { keepHighlight: clean === 'preview' })
   }
 
   getText() {
@@ -409,6 +474,7 @@ export class KEditor {
   setContent(html, { sanitize = this.options.sanitize, silent = false } = {}) {
     const value = sanitizeHtml(html || '<p><br></p>', { allowEmpty: true })
     this.root.innerHTML = value || '<p><br></p>'
+    this.highlightCode()
     this.afterEdit({ silent })
     if (!silent) this.history.snapshot(true)
     this.togglePlaceholder()
@@ -522,6 +588,125 @@ export class KEditor {
     return this
   }
 
+  /* ------------------------------ 代码块 ------------------------------ */
+
+  /** 可选语言清单（可用 options.code.languages 裁剪） */
+  codeLanguages() {
+    return listLanguages(this.options.code.languages)
+  }
+
+  /** 高亮正文中所有代码块（内容整体替换后调用） */
+  highlightCode() {
+    return highlightCodeBlocks(this.root, { highlight: this.options.code.highlight !== false })
+  }
+
+  /** 插入代码块：code 为源码，lang 缺省用 code.defaultLanguage */
+  insertCode(code = '', lang) {
+    return this.commands.insertCodeBlock(code, lang)
+  }
+
+  /** 切换代码块语言并重新高亮；不传目标时取光标所在代码块，返回 null 表示不在代码块中 */
+  setCodeLanguage(lang, target) {
+    return this.commands.setCodeLanguage(lang, target)
+  }
+
+  /** 光标所在代码块的语言；不在代码块中返回空串 */
+  getCodeLanguage() {
+    return this.commands.currentCodeLang()
+  }
+
+  /** 在代码块内输入时重新高亮（保持块内光标）；输入法组字期间跳过 */
+  queueCodeHighlight(event) {
+    if (event?.isComposing || this.composing) return
+    const block = codeBlockAt(this.root)
+    if (!block) return
+    clearTimeout(this.codeTimer)
+    this.codeTimer = setTimeout(() => {
+      this.codeTimer = null
+      if (!this.destroyed) refreshCodeBlock(block, { caret: true })
+    }, 140)
+  }
+
+  /* ------------------------------ 导入 Markdown ------------------------------ */
+
+  /** 落点模式：replace 替换全文（默认）| append 追加到文末 | cursor 插入到光标处 */
+  markdownOptions() {
+    const { insertMode, maxSize } = this.options.markdown
+    return { insertMode: normalizeInsertMode(insertMode), maxSize, auto: insertMode === 'replace' }
+  }
+
+  /**
+   * 导入 Markdown 并转为 HTML：source 可为字符串或 File/Blob（.md / .txt）
+   * 返回 { ok, html, summary, mode, chars, name }；失败时 ok=false
+   */
+  async importMarkdown(source, { mode = this.options.markdown.insertMode, silent = false } = {}) {
+    if (this.readOnly) {
+      this.toast.warn('只读模式不能导入内容')
+      return { ok: false, reason: 'readonly' }
+    }
+    const place = normalizeInsertMode(mode)
+    let text = ''
+    let name = ''
+    try {
+      if (typeof source === 'string') {
+        text = source
+      } else if (source && typeof source.arrayBuffer === 'function') {
+        name = source.name || ''
+        const limit = this.options.markdown.maxSize
+        if (limit && source.size > limit) throw new Error(`${name || '文件'} 超出大小限制（${formatSize(limit)}）`)
+        text = await readMarkdownFile(source)
+      } else if (source && typeof source.content === 'string') {
+        text = source.content
+        name = source.name || ''
+      } else {
+        throw new Error('导入内容必须是 Markdown 文本或文件')
+      }
+      const html = markdownToHtml(text, this.options.markdown)
+      if (!html.trim()) throw new Error('没有解析到可用内容')
+      if (place === 'replace') this.setContent(html)
+      else {
+        if (place === 'append') this.moveCaretToEnd()
+        this.commands.insertHTML(html)
+        this.highlightCode()
+      }
+      this.focus()
+      this.history.snapshot(true)
+      const summary = markdownSummary(html)
+      if (!silent) this.toast.show(`已导入${name ? ` ${name}` : ' Markdown'}（${summary.paragraphs + summary.headings} 个段落）`)
+      this.emit('markdownimport', { mode: place, name, summary, chars: text.length })
+      return { ok: true, html, summary, mode: place, chars: text.length, name }
+    } catch (error) {
+      this.reportError('markdown', error)
+      return { ok: false, reason: 'error', error, name }
+    }
+  }
+
+  /** 导入并替换全文 */
+  setMarkdown(source, options = {}) {
+    return this.importMarkdown(source, { mode: 'replace', ...options })
+  }
+
+  /** 导入并插入到光标处 */
+  insertMarkdown(source, options = {}) {
+    return this.importMarkdown(source, { mode: 'cursor', ...options })
+  }
+
+  /** 导入并追加到文末 */
+  appendMarkdown(source, options = {}) {
+    return this.importMarkdown(source, { mode: 'append', ...options })
+  }
+
+  /** 光标 / 选区移到正文末尾（追加导入用） */
+  moveCaretToEnd() {
+    const range = document.createRange()
+    range.selectNodeContents(this.root)
+    range.collapse(false)
+    const sel = window.getSelection()
+    sel.removeAllRanges()
+    sel.addRange(range)
+    return this
+  }
+
   /* ------------------------------ 媒体快捷入口 ------------------------------ */
 
   /** 上传任意文件（自动识别图片/视频），等价于点击工具栏上传 */
@@ -627,7 +812,8 @@ export class KEditor {
 
   openPreview() {
     this.previewMode = true
-    this.previewPanel.show(previewHtml(this.getHTML()))
+    // 预览与编辑视图一样保留语法高亮（导出才还原成纯代码）
+    this.previewPanel.show(previewHtml(this.getHTML({ clean: 'preview' })))
     this.refresh()
   }
 
@@ -695,6 +881,8 @@ export class KEditor {
     if (this.destroyed) return
     this.destroyed = true
     this.media.destroy()
+    this.uploader?.destroy()
+    clearTimeout(this.codeTimer)
     this.history.destroy()
     this.popover.destroy()
     this.source.destroy()
@@ -762,11 +950,28 @@ function resolveTarget(target, id) {
   throw new Error(`[KEditor] 无效的挂载目标（${typeof target}）`)
 }
 
+/** 内容区高度归一化：缺失 / 'auto' / null → 0（自适应） */
+export function normalizeHeight(value) {
+  if (value === '' || value === null || value === undefined || value === 'auto') return 0
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return 0
+  return clamp(Math.round(num), 0, 4000)
+}
+
 function mergeOptions(options) {
   const out = { ...defaults, ...options }
   out.image = { ...defaults.image, ...(options.image || {}) }
   out.paste = { ...defaults.paste, ...(options.paste || {}) }
   out.upload = { ...defaults.upload, ...(options.upload || {}) }
+  // 只配了一条链路时，不要让另一条继续用默认 mock（否则小文件/大文件会静默拿到 blob: 假地址）
+  const explicitNormal = options.uploader !== undefined
+  const explicitChunk = options.chunkUploader !== undefined
+  if (explicitNormal && !explicitChunk) out.chunkUploader = null // 只配普通上传 → 不启用分片
+  if (!explicitNormal && explicitChunk && options.upload?.mode === undefined) out.upload.mode = 'chunk' // 只配分片上传 → 全部走分片
+  out.code = { ...defaults.code, ...(options.code || {}) }
+  out.markdown = { ...defaults.markdown, ...(options.markdown || {}) }
+  out.markdown.insertMode = normalizeInsertMode(out.markdown.insertMode)
+  out.markdown.maxSize = Math.max(0, Number(out.markdown.maxSize) || 0)
   out.customButtons = normalizeCustomButtons(options.customButtons)
   if (Array.isArray(options.toolbar)) out.toolbar = options.toolbar
   if (options.toolbar === false) out.toolbar = []
@@ -775,7 +980,7 @@ function mergeOptions(options) {
   if (out.customButtons.length && options.toolbar !== false) {
     out.toolbar = placeCustomNames(out.toolbar, out.customButtons)
   }
-  out.height = clamp(out.height ?? 460, 0, 4000)
+  out.height = normalizeHeight(out.height)
   out.paperWidth = clamp(Number(out.paperWidth) || defaults.paperWidth, 200, 8000)
   out.paperMode = out.paperMode === 'fixed' ? 'fixed' : 'fluid'
   out.paperGap = Number.isFinite(Number(out.paperGap)) ? clamp(Number(out.paperGap), 0, 600) : defaults.paperGap
@@ -898,7 +1103,7 @@ function countWords(text) {
 }
 
 /** 导出用净化：去掉编辑器内部属性，保留业务可读的结构与样式 */
-export function exportHtml(html) {
+export function exportHtml(html, { keepHighlight = false } = {}) {
   const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html')
   const root = doc.body.firstChild
   root.querySelectorAll('[contenteditable]').forEach((n) => n.removeAttribute('contenteditable'))
@@ -907,6 +1112,8 @@ export function exportHtml(html) {
   root.querySelectorAll('[data-ke-marker]').forEach((n) => n.removeAttribute('data-ke-marker'))
   root.querySelectorAll('[data-placeholder]').forEach((n) => n.removeAttribute('data-placeholder'))
   root.querySelectorAll('.ke-is-selected-media').forEach((n) => n.classList.remove('ke-is-selected-media'))
+  // 语法高亮只用于编辑与预览视图：导出时还原为纯代码，只留 data-k-lang 与 class="language-x"
+  if (!keepHighlight) stripHighlight(root)
   // 上传中的占位块不进入导出结果
   root.querySelectorAll('[data-k-state="uploading"], [data-k-state="error"]').forEach((n) => n.remove())
   return root.innerHTML.trim()

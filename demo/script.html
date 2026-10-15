@@ -20,7 +20,7 @@
     <main>
       <div class="grid">
         <section class="card">
-          <h2>编辑器 <span class="hint" style="margin-left: auto">拖拽 / 粘贴即可分片上传，也可在面板里直接填网络链接</span></h2>
+          <h2>编辑器 <span class="hint" style="margin-left: auto">拖拽 / 粘贴即可上传；「代码块」按钮选语言后按语言语法高亮；把 <code class="inline">.md</code> 文件拖进正文或点尾栏「导入MD」导入</span></h2>
           <div class="body tight"><div id="editor"></div></div>
         </section>
 
@@ -37,6 +37,7 @@
               <div class="row-btns">
                 <button class="btn" id="btn-source">源码模式</button>
                 <button class="btn" id="btn-preview">预览</button>
+                <button class="btn" id="btn-md">导入 Markdown</button>
                 <button class="btn" id="btn-destroy" style="color: #e53e3e">销毁实例</button>
               </div>
               <dl class="kv" style="margin-top: 14px">
@@ -79,7 +80,7 @@
           </section>
 
           <section class="card">
-            <h2>上传事件（分片日志）</h2>
+            <h2>上传事件（普通 / 分片日志）</h2>
             <div class="body tight"><div class="log" id="log"></div></div>
           </section>
 
@@ -91,7 +92,7 @@
       </div>
     </main>
 
-    <script src="../dist/keditor.umd.js"></script>
+    <script src="../dist/keditor.umd.min.js"></script>
     <script>
       const log = document.getElementById('log')
       const out = document.getElementById('out')
@@ -104,8 +105,19 @@
         while (log.childElementCount > 40) log.lastElementChild.remove()
       }
 
-      // 分片适配器：演示用 mock（不请求任何服务），换成 {type:'http'} 即对接后端
-      const uploader = KEditor.mockAdapter({
+      // 普通上传（小文件整包一次请求）与分片上传（大文件切片并发）各自配置，互不影响
+      // 对接真实后端：uploader: '/api/upload', chunkUploader: '/api/chunk-upload'（响应里 url 非空即成功）
+      const normalUploader = KEditor.mockAdapter({
+        speed: 8,
+        latency: 120,
+        onEvent: (type, payload) => {
+          if (type === 'upload') addLog('普通上传', `${payload.name} 一次请求完成（不分片）`)
+          else if (type === 'instant') addLog('秒传命中', payload.name)
+        },
+      })
+
+      // 分片适配器：演示用 mock（不请求任何服务）
+      const chunkUploader = KEditor.mockAdapter({
         speed: 8, // 模拟带宽 MB/s
         latency: 120,
         onEvent: (type, payload) => {
@@ -118,11 +130,12 @@
       })
 
       const editor = KEditor.create('#editor', {
-        value: '<p>试试：从桌面拖一张图片或一段视频到这里。</p>',
+        value: '',
         placeholder: '开始撰写内容…',
-        height: 420,
-        uploader,
-        upload: { chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
+        uploader: normalUploader,
+        chunkUploader,
+        // 小于 512KB 走普通上传（一次请求），大文件自动走分片上传
+        upload: { mode: 'auto', chunkThreshold: 512 * 1024, chunkSize: 256 * 1024, concurrency: 3, retries: 2 },
         image: { compress: { maxWidth: 1600, quality: 0.85 } },
         maxVideoSize: 200 * 1024 * 1024,
         // 自定义工具栏按钮：未显式配置 toolbar 时会自动追加到默认工具栏
@@ -158,6 +171,7 @@
       })
 
       editor.on('ready', () => addLog('ready', '编辑器已挂载'))
+      window.editor = editor // 方便在控制台调试 / 自动化验证
       editor.on('uploaderror', (e) => addLog('上传异常', e.error.message, true))
       editor.on('customselect', (p) => addLog('customselect', `${p.name} → ${p.item.label}（插入方式：${p.action}）`))
 
@@ -212,8 +226,14 @@
           <blockquote>引用段落示例</blockquote>
           <ul><li>无序列表项</li><li>另一项</li></ul>
           <ol><li>有序列表</li><li>第二点</li></ol>
-          <table><tbody><tr><th>项目</th><th>说明</th></tr><tr><td>分片上传</td><td>256KB/片</td></tr></tbody></table>
-          <pre><code>console.log('代码块')</code></pre>
+          <table><tbody><tr><th>项目</th><th>说明</th></tr><tr><td>普通上传</td><td>整文件一次请求</td></tr><tr><td>分片上传</td><td>≥512KB 自动切片，256KB/片</td></tr></tbody></table>
+          <pre data-k-lang="javascript"><code>// 代码块：工具栏「代码块」按钮选语言，块内可直接编辑并保持高亮
+const editor = KEditor.create('#editor', {
+  uploader: '/api/upload',
+  chunkUploader: '/api/chunk-upload'
+})</code></pre>
+          <pre data-k-lang="python"><code>def greet(name):
+    return f'hello, {name}'</code></pre>
           <p><a href="https://mp.weixin.qq.com" target="_blank" rel="noopener noreferrer">一个链接</a></p>
           <hr>
           <p>—— 结束</p>`)
@@ -231,6 +251,7 @@
       }
       document.getElementById('btn-source').onclick = () => editor.toggleSource()
       document.getElementById('btn-preview').onclick = () => editor.togglePreview()
+      document.getElementById('btn-md').onclick = () => editor.toolbar.openMarkdown()
       document.getElementById('btn-destroy').onclick = () => {
         editor.destroy()
         addLog('destroy', '实例已销毁，刷新页面可重建', true)

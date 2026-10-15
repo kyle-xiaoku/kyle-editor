@@ -120,12 +120,73 @@ if (editor) {
 
   // 上传工具类导出
   ok('ChunkUploader 导出', typeof window.KEditor.ChunkUploader === 'function')
+  ok('SimpleUploader 导出', typeof window.KEditor.SimpleUploader === 'function')
+  ok('UploadPipeline 导出', typeof window.KEditor.UploadPipeline === 'function')
+  ok('createSimpleUploader / createChunkUploader 导出',
+     typeof window.KEditor.createSimpleUploader === 'function' && typeof window.KEditor.createChunkUploader === 'function')
   ok('mockAdapter/httpAdapter/simpleAdapter 导出',
      typeof window.KEditor.mockAdapter === 'function' &&
      typeof window.KEditor.httpAdapter === 'function' &&
      typeof window.KEditor.simpleAdapter === 'function')
   ok('sanitizeHtml/formatHtml 导出',
      typeof window.KEditor.sanitizeHtml === 'function' && typeof window.KEditor.formatHtml === 'function')
+
+  // 代码块：语言选择 + 语法高亮（本轮新增能力）
+  ok('代码块 API 全部导出',
+     ['highlightCode', 'listLanguages', 'normalizeLang', 'languageLabel', 'isCodeBlock'].every((k) => typeof window.KEditor[k] === 'function')
+     && Array.isArray(window.KEditor.LANGUAGES))
+  ok('内置语言清单 20 种', window.KEditor.listLanguages().length === 20, window.KEditor.listLanguages().length)
+  ok('highlightCode 可用且产出 token', /ke-tok-kw/.test(window.KEditor.highlightCode('const a = 1', 'js')))
+  ok('normalizeLang 认别名', window.KEditor.normalizeLang('mysql') === 'sql' && window.KEditor.normalizeLang('nope') === 'plaintext')
+  editor.setContent('<pre data-k-lang="python"><code>def f():\n    return 1</code></pre>')
+  const codeEl = editor.root.querySelector('pre code')
+  ok('安装产物能高亮代码块', codeEl.querySelectorAll('span[class*="ke-tok-"]').length > 0,
+     codeEl.querySelectorAll('span[class*="ke-tok-"]').length)
+  const codeOut = editor.getHTML()
+  ok('导出保持干净（无 token span、保留语言标记）',
+     !/ke-tok-/.test(codeOut) && codeOut.includes('data-k-lang="python"'), codeOut.slice(0, 90))
+  ok('codeLanguages() 返回语言清单', editor.codeLanguages().length === 20, editor.codeLanguages().length)
+  editor.focus()
+  const insertedPre = editor.insertCode('SELECT 1', 'sql')
+  ok('insertCode 插入代码块并写入语言', !!insertedPre && insertedPre.getAttribute('data-k-lang') === 'sql',
+     insertedPre && insertedPre.getAttribute('data-k-lang'))
+  ok('insertCode 后光标在块内（getCodeLanguage）', editor.getCodeLanguage() === 'sql', editor.getCodeLanguage())
+  ok('setCodeLanguage 切换语言', editor.setCodeLanguage('python') === 'python' && insertedPre.getAttribute('data-k-lang') === 'python',
+     insertedPre.getAttribute('data-k-lang'))
+  ok('isCodeBlock 识别代码块', window.KEditor.isCodeBlock(insertedPre) === true && window.KEditor.isCodeBlock(editor.root) === false)
+
+  // Markdown 导入：文件/文本 → HTML（本轮新增能力）
+  ok('Markdown API 全部导出',
+     ['markdownToHtml', 'markdownSummary', 'isMarkdownFile', 'readMarkdownFile', 'normalizeInsertMode', 'MARKDOWN_ACCEPT']
+       .every((k) => k in window.KEditor))
+  ok('markdownToHtml 产出正文规范 HTML',
+     /<h1>标题<\/h1>/.test(window.KEditor.markdownToHtml('# 标题')) &&
+     /<pre data-k-lang="javascript"><code class="language-javascript">/.test(window.KEditor.markdownToHtml('```js\nconst a = 1\n```')),
+     window.KEditor.markdownToHtml('```js\nconst a = 1\n```'))
+  ok('markdownToHtml 默认净化脚本', !/<script/i.test(window.KEditor.markdownToHtml('a\n\n<img src=x onerror=alert(1)>')))
+  ok('isMarkdownFile 认 .md / .txt，不认图片',
+     window.KEditor.isMarkdownFile({ name: 'a.md', type: '' }) &&
+     !window.KEditor.isMarkdownFile({ name: 'a.png', type: 'image/png' }))
+  ok('normalizeInsertMode 归一',
+     window.KEditor.normalizeInsertMode('cursor') === 'cursor' && window.KEditor.normalizeInsertMode('bad') === 'replace')
+  ok('工具栏含导入 Markdown 按钮', !!document.querySelector('.ke-tb [data-k-item="markdown"]'))
+  const mdResult = await editor.importMarkdown('# 导入标题\n\n正文 **加粗**\n\n```js\nconst a = 1\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |')
+  ok('importMarkdown 转换并落盘',
+     mdResult.ok && /<h1>导入标题<\/h1>/.test(editor.getHTML()) && !!editor.root.querySelector('table'),
+     JSON.stringify({ ok: mdResult.ok, mode: mdResult.mode }))
+  ok('导入的代码块已高亮且带上语言标记',
+     editor.root.querySelectorAll('pre span[class*="ke-tok-"]').length > 0 &&
+     editor.root.querySelector('pre').getAttribute('data-k-lang') === 'javascript',
+     editor.root.querySelector('pre').getAttribute('data-k-lang'))
+  ok('导出后高亮不落盘（可再次导入）',
+     !/ke-tok-/.test(editor.getHTML()) && /<pre data-k-lang="javascript"/.test(editor.getHTML()))
+  const mdFile = new File(['# 文件导入'], 'readme.md', { type: 'text/markdown' })
+  const fileResult = await editor.importMarkdown(mdFile)
+  ok('importMarkdown(File) 按文本读取并转换',
+     fileResult.ok && fileResult.name === 'readme.md' && /文件导入/.test(editor.getHTML()),
+     JSON.stringify({ ok: fileResult.ok, name: fileResult.name }))
+  await editor.appendMarkdown('追加段落')
+  ok('appendMarkdown 追加且保留原内容', /文件导入/.test(editor.getHTML()) && /追加段落/.test(editor.getHTML()))
 
   ok('destroy 可用', typeof editor.destroy === 'function')
 }
@@ -135,6 +196,7 @@ try {
   const ns = await import('./node_modules/kyle-editor/dist/keditor.es.js')
   ok('ESM 默认导出可用', typeof ns.default === 'function')
   ok('ESM 具名导出完整', typeof ns.create === 'function' && typeof ns.sanitizeHtml === 'function', Object.keys(ns).length)
+  ok('ESM 代码块 API 完整', typeof ns.highlightCode === 'function' && typeof ns.listLanguages === 'function' && Array.isArray(ns.LANGUAGES))
   const esmEditor = ns.create('#esm-box', { uploader: 'mock' })
   esmEditor.setContent('<p>ESM 路径正常</p>')
   ok('ESM create 可挂载', esmEditor.getText().includes('ESM'), esmEditor.getText().slice(0, 40))
@@ -353,6 +415,86 @@ try {
   box.remove()
 } catch (e) {
   ok('自定义按钮整体流程', false, e.message)
+}
+
+/* ---------------- 上传：普通上传 / 分片上传（安装后的真实产物） ---------------- */
+// 需求：上传分为普通上传与分片上传，可单独配置；分片上传只需一个接口，响应里 url 非空即成功
+try {
+  const realFetch = window.fetch
+  try {
+    const CS = 64 * 1024
+    const calls = []
+    let respondUrl = true // 关掉后模拟「接口从不返回 url」
+    window.fetch = async (url, init = {}) => {
+      const form = init.body instanceof FormData ? init.body : null
+      const query = new URL(String(url), location.href).searchParams
+      const hasIndex = form ? form.has('index') : query.has('index')
+      const index = Number(form ? form.get('index') : query.get('index'))
+      const total = Number(form ? form.get('total') : query.get('total'))
+      calls.push({ url: String(url), index, hasIndex, method: init.method, identifier: form && form.get('identifier'), chunk: form && form.get('file') })
+      // 服务端：分片收齐最后一片时返回地址；普通上传（无 index）一次就返回
+      const payload = respondUrl && (hasIndex ? index === total - 1 : true) ? { code: 0, data: { url: 'https://cdn.kyle.dev/single.png' } } : {}
+      return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify(payload) }
+    }
+    const file = new File([new Uint8Array(CS * 3)], 'single.png', { type: 'image/png' })
+    const up = window.KEditor.createChunkUploader('/api/upload', { chunkSize: CS, concurrency: 1, retries: 0 })
+    ok('安装包：分片上传只配一个地址', up.adapter.completeOnUrl === true && up.mode === 'chunk', `completeOnUrl=${up.adapter.completeOnUrl}`)
+    const res = await up.upload(file)
+    ok('安装包：接口返回 url 即上传成功', res.url === 'https://cdn.kyle.dev/single.png' && res.mode === 'chunk', res.url)
+    ok('安装包：分片全打到同一地址且字段齐备',
+       calls.length === 3 && calls.every((c) => c.method === 'POST' && c.url === '/api/upload' && c.identifier && c.chunk && c.chunk.size > 0),
+       `${calls.length} 次 method=${calls[0] && calls[0].method}`)
+    calls.length = 0
+    respondUrl = false
+    let err = ''
+    try {
+      await window.KEditor.createChunkUploader({ type: 'http', url: '/api/upload' }, { chunkSize: CS, concurrency: 1, retries: 0 }).upload(file)
+    } catch (e) { err = e.message }
+    ok('安装包：接口没有 url 时判定失败', /未返回 url/.test(err), err.slice(0, 60))
+
+    // 普通上传：整个文件一次请求
+    calls.length = 0
+    respondUrl = true
+    const whole = window.KEditor.createSimpleUploader('/api/upload')
+    const wholeRes = await whole.upload(file)
+    ok('安装包：普通上传整个文件只请求一次', calls.length === 1 && !calls[0].hasIndex && calls[0].chunk.size === file.size, `${calls.length} 次 / ${calls[0] && calls[0].chunk.size}B`)
+    ok('安装包：普通上传响应 url 即结果', wholeRes.url === 'https://cdn.kyle.dev/single.png' && wholeRes.mode === 'normal' && wholeRes.chunks === 1, `${wholeRes.url} / ${wholeRes.mode}`)
+
+    // 旧三接口配置：搮截并报错
+    let legacyErr = ''
+    try { window.KEditor.httpAdapter({ initUrl: '/i', chunkUrl: '/c', completeUrl: '/d' }) } catch (e) { legacyErr = e.message }
+    ok('安装包：已移除的三接口配置报错提示', /单接口/.test(legacyErr) && /initUrl/.test(legacyErr), legacyErr.slice(0, 60))
+  } finally {
+    window.fetch = realFetch
+  }
+} catch (e) {
+  ok('上传（普通 / 分片）整体流程', false, e.message)
+}
+
+/* ---------------- 内容区高度（安装后产物） ---------------- */
+try {
+  const LONG = ('<p>' + '自适应高度测试内容。'.repeat(8) + '</p>').repeat(40)
+  const autoBox = document.createElement('div')
+  const fixBox = document.createElement('div')
+  autoBox.style.cssText = fixBox.style.cssText = 'width:900px'
+  document.body.append(autoBox, fixBox)
+  const autoEd = window.KEditor.create(autoBox, { value: LONG, uploader: 'mock' })
+  const fixEd = window.KEditor.create(fixBox, { value: LONG, height: 460, uploader: 'mock' })
+  await new Promise((r) => setTimeout(r, 120))
+  ok('安装包：不配 height 时内容区自适应擑开', autoEd.el.classList.contains('ke-is-auto') && autoEd.paperEl.offsetHeight > 1500 && !autoEd.scrollEl.style.height,
+     `paper=${autoEd.paperEl.offsetHeight} inline="${autoEd.scrollEl.style.height}"`)
+  ok('安装包：自适应模式下无内部滚动', autoEd.scrollEl.scrollHeight <= autoEd.scrollEl.clientHeight + 1,
+     `sh=${autoEd.scrollEl.scrollHeight} ch=${autoEd.scrollEl.clientHeight}`)
+  ok('安装包：配置 height 时固定高度并内部滚动', fixEd.scrollEl.style.height === '460px' && fixEd.scrollEl.scrollHeight > fixEd.scrollEl.clientHeight + 1,
+     `inline=${fixEd.scrollEl.style.height}`)
+  ok('安装包：setHeight 可在固定/自适应间切换', autoEd.setHeight(300) === 300 && !autoEd.el.classList.contains('ke-is-auto') && autoEd.setHeight(0) === 0 && autoEd.el.classList.contains('ke-is-auto'),
+     JSON.stringify(autoEd.heightOptions()))
+  autoEd.destroy()
+  fixEd.destroy()
+  autoBox.remove()
+  fixBox.remove()
+} catch (e) {
+  ok('内容区高度（自适应 / 固定）', false, e.message)
 }
 
 /* ---------------- 汇总 ---------------- */
