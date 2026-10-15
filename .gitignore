@@ -3,6 +3,7 @@ uploads/
 .DS_Store
 .pack-verify/
 .scratch/
+test/screenshots
 *.tgz
 .idea
 .talkmed-agentpilot
