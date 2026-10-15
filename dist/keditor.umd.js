@@ -7132,7 +7132,7 @@ ${items}
     });
     return root.innerHTML;
   }
-  const version = "1.0.7";
+  const version = "1.0.8";
   function create(target, options = {}) {
     return new KEditor(target, options);
   }
