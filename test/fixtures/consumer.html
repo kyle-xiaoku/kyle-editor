@@ -276,6 +276,35 @@ try {
     await nextTick()
     await new Promise((r) => setTimeout(r, 300))
     ok('v-model 外部赋值同步到编辑器', ex.getHTML().includes('外部双向绑定'), ex.getHTML().slice(0, 60))
+
+    // Markdown 导入：ref 上应直接可用（历史缺陷：这些方法只在 .editor 上才有，
+    // 于是 `editorRef.value.importMarkdown(file)` 报 TypeError，看起来像「导入没进正文」）
+    const MD_API = ['importMarkdown', 'setMarkdown', 'insertMarkdown', 'appendMarkdown', 'markdownOptions']
+    ok('ref 暴露 Markdown 导入 API', MD_API.every((k) => typeof ex[k] === 'function'),
+       ex ? MD_API.map((k) => `${k}=${typeof ex[k]}`).join(' ') : 'null ref')
+    if (typeof ex.importMarkdown === 'function') {
+      const mdRes = await ex.importMarkdown('# 导入回归标题\n\n导入回归段落')
+      await nextTick()
+      await new Promise((r) => setTimeout(r, 300))
+      const box = document.querySelector('#vue-box .ke-content')
+      ok('ref.importMarkdown 把 Markdown 写入正文',
+         !!(mdRes && mdRes.ok) && ex.getHTML().includes('<h1>导入回归标题</h1>') && !!box && box.textContent.includes('导入回归段落'),
+         `${mdRes && mdRes.ok} :: ${ex.getHTML().slice(0, 60)}`)
+      ok('导入结果同步回 v-model', String(inst.model.value).includes('导入回归标题'), String(inst.model.value).slice(0, 60))
+    }
+
+    // 非字符串 v-model 不得清空正文（
+    // 历史缺陷：undefined → <p><br></p>，对象 → 正文变成 [object Object]
+    const keep = ex.getHTML()
+    inst.model.value = undefined
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 250))
+    ok('v-model 赋 undefined 不清空正文', ex.getHTML() === keep, ex.getHTML().slice(0, 60))
+    inst.model.value = { html: 'x' } // 预期产生一条 KEditor 告警：非字符串赋值被忽略
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 250))
+    ok('v-model 赋对象不写入 [object Object]',
+       ex.getHTML() === keep && !/\[object Object\]/.test(ex.getHTML()), ex.getHTML().slice(0, 60))
   }
   localApp.unmount()
   ok('unmount 后卸载编辑器', !document.querySelector('#vue-box .ke-tb'))

@@ -189,23 +189,57 @@ const { host, editor } = useKEditor({ height: 400 })
 | Emit | 载荷 | 说明 |
 |------|------|------|
 | `update:modelValue` | `html: string` | 内容变化（自动去内部属性） |
-| `change` | `{html, text, counts}` | 内容变化（防抖后） |
+| `change` | `html: string` | 内容变化（防抖后），与 `update:modelValue` 同一个 HTML 字符串；带结构的载荷用 `instance.on('change', ({ html, text }) => …)` |
 | `ready` | `editor` | 实例创建完成 |
 | `upload` | `{state, kind, name, size, progress, result, error, node}` | 上传生命周期，`state` 为 `start/progress/success/error/cancel` |
 | `error` | `{type, error, message}` | 内部异常（上传失败、净化失败、源码解析失败） |
 | `save` | `{html, text, counts}` | 编辑器内按下 ⌘/Ctrl+S |
 | `focus` / `blur` | — | 焦点变化 |
 
-通过 `ref` 拿到原生实例做进阶操作：
+通过 `ref` 拿到原生实例做进阶操作：组件已把 KEditor 的公开 API 全部透出到 `ref` 上，**直接 `editorRef.value.xxx()` 即可**（无需再写 `.editor`）：
 
 ```vue
-<k-editor ref="editorRef" v-model="html" />
+<template>
+  <k-editor ref="editorRef" v-model="html" :options="options" />
+  <button @click="pick">导入 Markdown</button>
+  <input ref="fileRef" type="file" accept=".md,.markdown,.txt" hidden @change="onFile" />
+</template>
+
 <script setup>
+import { ref } from 'vue'
+
+const html = ref('')
 const editorRef = ref()
-editorRef.value.editor.setContent('<p>来自父组件</p>')   // KEditor 实例
-editorRef.value.getHTML()
+const fileRef = ref()
+
+const pick = () => fileRef.value.click()
+const onFile = async (event) => {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  // 等价于 editorRef.value.editor.importMarkdown(file, { mode: 'append' })
+  const result = await editorRef.value.importMarkdown(file, { mode: 'append' })
+  if (!result?.ok) console.warn('导入失败：', result?.reason)
+}
 </script>
 ```
+
+| ref 上的成员 | 说明 |
+|------|------|
+| `editor` | 原始 `KEditor` 实例（兜底用） |
+| `getHTML()` / `getText()` / `getJSON()` / `counts()` | 读取内容与统计 |
+| `setContent(html, options?)` / `clear()` / `focus()` / `blur()` / `undo()` / `redo()` | 内容与焦点 |
+| `importMarkdown(source, options?)` | **导入 Markdown**：`source` 支持字符串 / `File` / `{name, content}`，`options.mode` 为 `replace` / `append` / `cursor` |
+| `setMarkdown()` / `insertMarkdown()` / `appendMarkdown()` / `markdownOptions()` | Markdown 落点快捷方式与当前配置 |
+| `insertImage(url, alt?)` / `insertVideo(url, label?)` / `insertCode(code?, lang?)` / `appendHTML(html)` | 直接插入内容 |
+| `upload(file, kind?)` / `cancelUploads()` | 上传 |
+| `setButtonOptions(name, items)` / `getButtonValue(name)` / `setButtonValue(name, value)` / `addButton(spec, options?)` / `moveButton(name, position)` / `removeButton(name)` | 工具栏按钮 |
+| `setReadOnly(value)` / `setHeight(value)` / `setPaper(config?)` | 只读与外观 |
+| `enterSource()` / `openPreview()` | 源码模式 / 预览 |
+| `on(name, handler)` / `off(name, handler?)` | 订阅核心事件（`markdownimport`、`change`、`uploaddone` …） |
+| `root` | 正文 `contenteditable` 节点 |
+
+> `v-model` 只会接受**字符串**。给 `modelValue` 赋 `undefined` / `null` / 对象时会被忽略并给出一次 `console.warn`，不会清空正文。
+> 需要带结构的变更载荷请用 `editorRef.value.on('change', ({ html, text }) => …)` 或 `@change`（`@change` 载荷与 `update:modelValue` 一样是 HTML 字符串）。
 
 ### 3.5 SSR 框架（Nuxt 3 / Next.js）
 

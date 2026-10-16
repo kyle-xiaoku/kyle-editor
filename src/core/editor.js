@@ -666,6 +666,9 @@ export class KEditor {
       if (place === 'replace') this.setContent(html)
       else {
         if (place === 'append') this.moveCaretToEnd()
+        // cursor：光标不在正文里（例如刚在面板输入框里操作过）时回到打开面板前保存的光标，
+        // 否则保留当前光标（拖拽导入靠落点光标定位，不能覆盖）
+        else if (!getRange(this.root)) this.restoreSelection()
         this.commands.insertHTML(html)
         this.highlightCode()
       }

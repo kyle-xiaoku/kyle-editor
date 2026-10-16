@@ -6723,6 +6723,7 @@ ${items}
         if (place === "replace") this.setContent(html);
         else {
           if (place === "append") this.moveCaretToEnd();
+          else if (!getRange(this.root)) this.restoreSelection();
           this.commands.insertHTML(html);
           this.highlightCode();
         }
@@ -7132,7 +7133,7 @@ ${items}
     });
     return root.innerHTML;
   }
-  const version = "1.0.8";
+  const version = "1.0.9";
   function create(target, options = {}) {
     return new KEditor(target, options);
   }

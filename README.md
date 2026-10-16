@@ -102,6 +102,40 @@ const onUpload = (payload) => console.log(payload.stage, payload.percent)
 >
 > ESM / Webpack / Vite / React 用法见 [docs/integration.md](docs/integration.md)。
 
+#### Vue 组件 ref 上可直接用的 API
+
+组件把 KEditor 的公开 API 全部透出到 `ref` 上，**不用再写 `.editor`**。上传、导入 Markdown 这类「自己写按钮」的场景可直接调用：
+
+```vue
+<template>
+  <k-editor ref="editorRef" v-model="form.content" :options="options" />
+  <input ref="fileRef" type="file" accept=".md,.markdown,.txt" hidden @change="onFile" />
+  <button @click="fileRef.click()">导入 Markdown</button>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+
+const form = ref({ content: '' })
+const editorRef = ref()
+const fileRef = ref()
+const options = { height: 420, uploader: '/api/upload' }
+
+const onFile = async (event) => {
+  const file = event.target.files?.[0]
+  event.target.value = ''                                    // 允许重复选同一个文件
+  const res = await editorRef.value.importMarkdown(file, { mode: 'append' })
+  if (!res?.ok) console.warn('导入失败：', res?.reason)        // 'readonly' | 'error'
+}
+</script>
+```
+
+常用的几个（完整清单见 [docs/integration.md](docs/integration.md) 第 3.4 节）：
+`importMarkdown / setMarkdown / insertMarkdown / appendMarkdown`、`getHTML / getText / getJSON / counts`、`setContent / clear / focus / blur / undo / redo`、`insertImage / insertVideo / insertCode / appendHTML`、`upload / cancelUploads`、`setReadOnly / setHeight / setPaper`、`setButtonOptions / addButton / moveButton / removeButton`、`enterSource / openPreview`、`on / off`。
+
+> ⚠️ `v-model` 只接受**字符串**：传入 `undefined` / `null` / 对象会被忽略（并给出一次 `console.warn`），不会把正文清空；要清空请显式传 `''`。
+> 需要带结构的变更载荷（`{ html, text }`）请用 `editorRef.value.on('change', …)` 或 `editorRef.value.editor`。
+
 ## 上传配置：普通上传 / 分片上传，各自独立配置
 
 上传分两条链路，**互不影响**，可以只配一条，也可以都配：
@@ -495,7 +529,7 @@ npm run dev            # 静态服务 http://127.0.0.1:5178
 | `dist/keditor.umd.js` | 同上但未压缩，便于断点调试 | 300 KB / gzip 78 KB |
 | `dist/keditor.es.js` | ESM（`exports.import`，打包器走这个） | 288 KB |
 | `dist/keditor.cjs` | CommonJS（`exports.require`） | 288 KB |
-| `dist/keditor-vue.{es,cjs,umd}.js` | Vue 组件/插件，外部化 `vue` 与本包 | 各约 4 KB |
+| `dist/keditor-vue.{es,cjs,umd}.js` | Vue 组件/插件，外部化 `vue` 与本包 | 各约 9 KB（gzip 2 KB，保留注释便于调试） |
 
 两份 UMD 产物由 `vite.config.core.js`（未压缩）与 `vite.config.min.js`（`minify: 'esbuild'`）从同一入口分别构建，全局变量都是 `window.KEditor`，API 完全一致。
 
@@ -505,10 +539,10 @@ npm run dev            # 静态服务 http://127.0.0.1:5178
 npm run dev &          # 先启动静态服务（测试页面走 http://127.0.0.1:5178）
 
 npm run verify         # build + 冒烟(未压缩) + 冒烟(压缩) + 页面检查 + 类型 + 发布配置
-npm test               # 324 项冒烟，跑 dist/keditor.umd.js
-npm run test:min       # 同一套 324 项冒烟，跑 dist/keditor.umd.min.js
+npm test               # 330 项冒烟，跑 dist/keditor.umd.js
+npm run test:min       # 同一套 330 项冒烟，跑 dist/keditor.umd.min.js
 npm run test:pages     # demo / 首页零控制台错误 + 真实交互探针
-npm run test:install   # npm pack → 隔离安装（129 项：Node 26 + 浏览器 103）
+npm run test:install   # npm pack → 隔离安装（134 项：Node 26 + 浏览器 108，含 Vue 组件回归）
 npm run test:visual    # 24 张关键状态截图（test/screenshots/）
 ```
 

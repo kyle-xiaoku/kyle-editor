@@ -1,6 +1,18 @@
 /** KEditor Vue 3 集成类型（kyle-editor/vue） */
 import type { App, ComponentOptionsMixin, ComponentPublicInstance, DefineComponent, Ref } from 'vue'
-import type { EditorCounts, EditorEventMap, KEditor, KEditorOptions, UploadHookPayload } from './index'
+import type {
+  ButtonPlaceOptions,
+  CustomButtonOption,
+  CustomButtonSpec,
+  EditorCounts,
+  EditorEventMap,
+  KEditor,
+  KEditorOptions,
+  MarkdownImportResult,
+  MarkdownInsertMode,
+  MarkdownSource,
+  UploadHookPayload,
+} from './index'
 
 export interface KEditorVueProps {
   /** v-model 绑定的 HTML */
@@ -24,16 +36,56 @@ export interface KEditorVueEmits {
   (e: 'focus'): void
 }
 
-/** ref 上可访问的实例方法 */
+/** ref 上可访问的实例成员（与组件 expose 一致，等价于 KEditor 实例的公开 API） */
 export interface KEditorVueExposed {
+  /** 原始 KEditor 实例，用于 expose 未覆盖的能力 */
   readonly editor: KEditor | null
-  getHTML(): string
+  /** 正文 contenteditable 节点 */
+  readonly root: HTMLElement | null
+  /* 读取 */
+  getHTML(options?: { clean?: boolean | 'preview' }): string
   getText(): string
+  getJSON(): { html: string; text: string; counts: EditorCounts } | null
   counts(): EditorCounts | null
+  markdownOptions(): { insertMode: 'replace' | 'append' | 'cursor'; maxSize: number; auto: boolean } | null
+  /* 内容 */
+  setContent(html: string, options?: { sanitize?: boolean; silent?: boolean }): void
+  clear(): void
   focus(): void
-  setContent(html: string): void
+  blur(): void
+  undo(): void
+  redo(): void
+  setReadOnly(value: boolean): void
+  /* Markdown 导入（等价于 editor.importMarkdown 等） */
+  importMarkdown(source: MarkdownSource, options?: { mode?: MarkdownInsertMode; silent?: boolean }): Promise<MarkdownImportResult> | undefined
+  setMarkdown(source: MarkdownSource, options?: { silent?: boolean }): Promise<MarkdownImportResult> | undefined
+  insertMarkdown(source: MarkdownSource, options?: { silent?: boolean }): Promise<MarkdownImportResult> | undefined
+  appendMarkdown(source: MarkdownSource, options?: { silent?: boolean }): Promise<MarkdownImportResult> | undefined
+  moveCaretToEnd(): void
+  /* 插入 / 上传 */
+  appendHTML(html: string): void
+  insertImage(url: string, alt?: string): HTMLElement | undefined
+  insertVideo(url: string, label?: string): HTMLElement | undefined
+  insertCode(code?: string, lang?: string): HTMLElement | undefined
+  codeLanguages(): { value: string; label: string }[]
+  highlightCode(): void
+  upload(file: File, kind?: 'image' | 'video'): Promise<unknown>
+  cancelUploads(): void
+  /* 工具栏按钮 */
+  addButton(spec: CustomButtonSpec, options?: ButtonPlaceOptions): HTMLElement | null | undefined
+  removeButton(name: string): boolean | undefined
+  moveButton(name: string, position: ButtonPlaceOptions): boolean | undefined
+  setButtonOptions(name: string, items: CustomButtonOption[] | string[]): CustomButtonOption[] | undefined
+  getButtonValue(name: string): CustomButtonOption | null | undefined
+  setButtonValue(name: string, value: string | number): CustomButtonOption | null | undefined
+  /* 视图 */
   enterSource(): void
   openPreview(): void
+  setHeight(value: number | 'auto'): number | undefined
+  setPaper(config?: { width?: number; mode?: 'fluid' | 'fixed'; gap?: number; maxWidth?: number }): unknown
+  /* 事件 */
+  on(name: string, handler: (payload: any) => void): void
+  off(name: string, handler?: (payload: any) => void): void
 }
 
 export declare const KEditorVue: DefineComponent<
