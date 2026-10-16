@@ -225,7 +225,7 @@
 .ke-md-panel {
   width: 372px; max-width: calc(100vw - 24px);
   display: flex; flex-direction: column; padding-bottom: 0;
-  max-height: var(--ke-pop-max, 560px);
+  max-height: var(--ke-pop-max, 480px);
 }
 .ke-md-panel .ke-panel-head, .ke-md-panel .ke-tabs { flex: none; }
 .ke-md-panel .ke-tabs { margin-bottom: 0; }
