@@ -227,7 +227,7 @@ const CSS$1 = `
 .ke-md-panel .ke-tabs { margin-bottom: 0; }
 /* 中间区滚动、底部按钮常驻：窗口再矮也能点到「导入到正文」 */
 .ke-md-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -14px; padding: 12px 14px 0; }
-.ke-md-panel .ke-panel-foot { flex: none; margin: 10px 0 12px; }
+.ke-md-panel .ke-panel-foot { flex: none; margin: 10px 0 20px; }
 .ke-md-text {
   width: 100%; min-height: 118px; max-height: 190px; padding: 10px 11px; border: 1px solid var(--ke-line);
   border-radius: 8px; background: #fbfcfd; color: #1f2329; font-size: 12.5px; line-height: 1.7; resize: vertical;
